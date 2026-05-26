@@ -64,7 +64,7 @@ A compact encoder can provide an embedding of the request for:
 - proximity to previously seen prompts
 - confidence features derived from a small model
 
-**Shared Prefill Architecture.** When a compact encoder is used, it must be promoted to a **shared prefill step** executed once per request — its FLOP and bandwidth cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Encoder weights must remain as persistent device-memory residents to avoid cold-load latency on the critical inference path. The gate's real-time decision logic must independently satisfy the gate efficiency constraints in §8.4 without relying on the encoder's separate amortization.
+**Shared Prefill Architecture.** When a compact encoder is used, it must be promoted to a **shared prefill step** executed once per request — its FLOP and bandwidth cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Where the serving stack supports it, encoder weights should be pinned in device memory using platform-specific mechanisms (e.g., NVIDIA MPS memory locking, PyTorch persistent allocation pools) to minimize cold-load latency on the critical inference path; on stacks without memory-pinning APIs, the encoder must be excluded from the KV cache eviction pool under a separate allocation policy, and cold-load latency penalties must be measured and reported (if they exceed $0.1 \times C_g$, the shared-prefill amortization benefit must be recalculated). The gate's real-time decision logic must independently satisfy the gate efficiency constraints in §8.4 without relying on the encoder's separate amortization.
 
 ### 2.3 System-State Features
 
@@ -174,7 +174,7 @@ Routing should be judged by more than average cost reduction.
 - regret versus the full route
 - escalation frequency
 - calibration error of uncertainty estimates
-- thermodynamic ROI of the gate at the **90th-percentile escalation rate** $p_{90}$ observed in production traffic; positive ROI must be demonstrated across the full empirical range $p \in [0, 1]$, not only at the median operating point
+- thermodynamic ROI of the gate at the **90th-percentile escalation rate** $p_{90}$ observed in production traffic; positive ROI must be demonstrated up to $p_{90}$ (ROI is necessarily negative at $p \to 1$ for any nonzero gate, so the requirement is bounded by $p_{90}$, not the full range $p \in [0, 1]$)
 
 ### 6.2 Risk-Coverage View
 
@@ -231,7 +231,7 @@ $$C_g \leq \epsilon_f \cdot C_f, \qquad \epsilon_f \in [0.01,\; 0.05]$$
 
 $$C_g \leq \epsilon_n \cdot (1 - p^*)(C_s - C_f), \qquad \epsilon_n \leq 0.10$$
 
-The first constraint limits the gate to at most 1–5% of the fast path's own FLOP and bandwidth budget, preventing it from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Both constraints must hold at the observed $p^*$, not just at the median. Any gate architecture that violates either constraint must be rejected or restructured before deployment.
+The first constraint limits the gate to at most 1–5% of the fast path's own FLOP and bandwidth budget, preventing it from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Both constraints must hold at the observed $p^*$, not just at the median. $p^*$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. A gate that violates either constraint at the current $p^*$ — whether due to initial design or subsequent workload drift — must trigger a mandatory routing-policy review within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance at the current $p^*$.
 
 ---
 

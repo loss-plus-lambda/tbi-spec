@@ -175,7 +175,7 @@ The preferred primary energy estimator is the **FLOP-count analytical proxy**, w
 
 $$\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,\, k) + \beta_k$$
 
-where $\alpha_k$ is a per-route joules-per-FLOP coefficient and $\beta_k$ is a per-route static memory-access cost term, both calibrated from periodic offline profiling runs at representative batch shapes. This proxy is the default estimator for routing and surrogate training.
+where $\alpha_k$ is a per-route joules-per-FLOP coefficient and $\beta_k$ is a per-route memory-access cost term, both calibrated from periodic offline profiling runs at representative batch shapes. This proxy is the default estimator for routing and surrogate training.
 
 ### 6.4 Windowed Power Integration (Fallback)
 
@@ -209,11 +209,11 @@ These adjustments should be conservative and reversible.
 
 $$\omega_c \leq \frac{1}{2\,\Delta t_{\text{sensor}}}$$
 
-The controller gain $K$ for any DVFS adjustment loop is bounded by the Nyquist stability condition applied to the delay-augmented plant:
+The DVFS controller gain $K$ has no closed-form bound without hardware-specific plant identification. A conservative starting estimate for a linearized first-order thermal plant with pure sensor delay is:
 
-$$K \leq \frac{\pi}{2\,\omega_c\,\Delta t_{\text{sensor}}}$$
+$$K \leq \frac{1}{4\,\omega_c\,\Delta t_{\text{sensor}}\,R_\theta}$$
 
-Gain selections exceeding this bound risk sawtooth oscillation in the DVFS state across the load window and must not be deployed.
+where $R_\theta$ is the junction-to-case thermal resistance (°C/W) at the nominal operating clock state. This estimate provides approximately 45° phase margin and must be empirically validated before production deployment: apply a 10°C step in $\tau_{\text{junction}}$ at nominal load and confirm settling within $5\,R_\theta C_\theta$ with less than 15% overshoot. Any gain selection that fails this step-response test must not be deployed.
 
 ### 7.2 Slow Offline Optimization
 
@@ -244,7 +244,7 @@ The following are defined as hard architectural requirements and may be positive
 - the dual-window separation between fast ($\leq 1$ ms) and slow ($\geq 5$–$50$ ms) telemetry paths
 - the FLOP-count analytical proxy $\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,k) + \beta_k$ as the primary per-route energy estimator
 - the low-pass filter bound $\omega_c \leq 1 / (2\,\Delta t_{\text{sensor}})$ on DVFS controller updates
-- the Nyquist-derived controller gain bound $K \leq \pi / (2\,\omega_c\,\Delta t_{\text{sensor}})$
+- the empirically validated DVFS controller gain bound (45° phase-margin step-response test, §7.1), with conservative starting estimate $K \leq 1/(4\,\omega_c\,\Delta t_{\text{sensor}}\,R_\theta)$
 
 A conformant TBI telemetry implementation satisfies all four specified requirements. Measurement resolution and overhead beyond these bounds remain hardware-tier dependent.
 

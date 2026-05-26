@@ -180,18 +180,24 @@ where $E_{\text{daemon}}$ is the measured energy cost of the daemon run, $|\Delt
 
 $$\frac{\partial\,|\Delta J_{\text{saving}}|}{\partial\,n_{\text{rounds}}} \leq \kappa$$
 
-Running daemon iterations past this boundary inverts the energy ROI and is treated as a configuration defect.
+Running daemon iterations past this boundary inverts the energy ROI and is treated as a configuration defect. The threshold $\kappa$ is calibrated as the 10th percentile of per-round $|\Delta J_{\text{saving}}|$ observed during the first three daemon rounds on the target model and workload, placing the stopping boundary below the empirical minimum productive improvement.
 
 **Grid-Aware Efficiency Policy.** Energy accounting must not conflate Joule consumption with carbon impact. Off-peak scheduling that minimizes GPU idle time can worsen grid carbon intensity when those hours are served by baseload carbon generation. TBI therefore mandates grid-aware scheduling for daemon windows:
 
 - Daemon execution is preferred when marginal grid carbon intensity $\gamma(t)$ is at or below the rolling 24-hour median $\bar{\gamma}_{24h}$, sourced from a real-time forecast (e.g., WattTime or Electricity Maps).
 - The effective scheduling metric is the carbon-adjusted cost $E_{\text{carbon}} = E_{\text{daemon}} \cdot \gamma(t)$, not raw Joules alone.
 
+**Carbon-Unified Amortization.** When Grid-Aware scheduling is active, the Joule-denominated amortization gate must be expressed in carbon-equivalent units to avoid contradictory decisions. A daemon that runs longer at low $\gamma(t)$ may consume more Joules but fewer kg CO₂e; the Joule gate alone would incorrectly reject it. In carbon-accounting mode:
+
+$$\frac{E_{\text{daemon}} \cdot \gamma(t_{\text{run}})}{|\Delta J_{\text{serving}}| \cdot \bar{\gamma}_{24h} \cdot R_{\text{projected}}} \leq H_{\text{amortize}}$$
+
+where $\gamma(t_{\text{run}})$ is the actual grid carbon intensity at daemon execution time and $\bar{\gamma}_{24h}$ is the rolling 24-hour median used to estimate forward serving-time carbon savings. When Grid-Aware scheduling is inactive, the original Joule-denominated gate applies.
+
 **Thermal Recovery Gap.** Daemon runs at full GPU utilization delay thermal recovery of the package. A mandatory cooldown gap $\Delta t_{\text{cool}}$ is enforced between the end of any daemon window and the start of the subsequent peak traffic window:
 
-$$\Delta t_{\text{cool}} \geq R_\theta C_\theta \ln\!\left(\frac{\tau_{\text{daemon}} - \tau_{\text{ambient}}}{\tau_{\text{target}} - \tau_{\text{ambient}}}\right)$$
+$$\Delta t_{\text{cool}} \geq 1.5 \cdot R_\theta C_\theta \ln\!\left(\frac{\tau_{\text{daemon}} - \tau_{\text{ambient}}}{\tau_{\text{target}} - \tau_{\text{ambient}}}\right)$$
 
-where $R_\theta$ is the package thermal resistance, $C_\theta$ is thermal capacitance, $\tau_{\text{daemon}}$ is the measured junction temperature at daemon completion, and $\tau_{\text{target}}$ is the peak-traffic thermal headroom target. Where hardware thermal models are unavailable, this window defaults to empirical measurement across at least 20 run-cooldown cycles on the target hardware class.
+where $R_\theta$ and $C_\theta$ are the thermal resistance and capacitance of the **dominant thermal node** — junction-to-heatsink for air-cooled hardware, junction-to-coolant for liquid-cooled hardware. The 1.5× safety factor accounts for multi-node thermal coupling: GPU packages exhibit a cascade of thermal nodes (die, package, TIM, heatsink) with distinct time constants; the single-pole formula underestimates recovery time when the heatsink has not equilibrated with the die. Where hardware thermal models are unavailable, this window defaults to empirical measurement across at least 20 run-cooldown cycles; the bound must be set at the **95th percentile** of measured recovery times, not the mean.
 
 This makes the update policy measurable, auditable, globally energy-justified, and carbon-aware.
 

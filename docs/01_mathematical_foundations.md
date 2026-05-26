@@ -175,18 +175,32 @@ $$
 \end{bmatrix}
 $$
 
-trained by minimizing:
+trained by minimizing a variance-normalized composite loss:
 
 $$
 \min_{\psi}
 \sum_{i=1}^{N}
 \left\|
-\hat{\mathbf{c}}_\psi(z_i) - c_i
+\mathbf{D}^{-1/2}\!\left(\hat{\mathbf{c}}_\psi(z_i) - c_i\right)
 \right\|_2^2
 + \eta \|\psi\|_2^2
 $$
 
-or, when appropriate, a mixture of regression and classification losses for continuous and discrete targets.
+where $\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$ is the diagonal matrix of empirical per-component variances measured on $\mathcal{D}_{\text{trace}}$. Without this normalization the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) dominates the MSE objective and the surrogate fails to learn the other components.
+
+The binary throttling indicator $\chi \in \{0,1\}$ is trained with a separate **cross-entropy head**:
+
+$$
+\min_{\psi_\chi}
+\sum_i
+\left[
+-\chi_i \log \hat{\chi}_{\psi_\chi}(z_i)
+- (1-\chi_i)\log(1 - \hat{\chi}_{\psi_\chi}(z_i))
+\right]
++ \eta_\chi \|\psi_\chi\|_2^2
+$$
+
+The surrogate uses separate prediction heads: normalized MSE for continuous costs $(J, L, M)$ and cross-entropy for the binary safety indicator $\chi$.
 
 ### 3.4 Use in Optimization
 
@@ -206,15 +220,21 @@ This is the central mathematical move in TBI: the system optimizes against a mea
 
 ### 3.5 Surrogate Validity Under Policy Updates
 
-The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, the distribution of feature vectors $z_i$ shifts and the surrogate may become miscalibrated on the new request distribution. Surrogate retraining is therefore triggered whenever policy drift exceeds a threshold:
+The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, the distribution of feature vectors $z_i$ shifts and the surrogate may become miscalibrated on the new request distribution.
 
-$$\|\phi^{\text{new}} - \phi^{\text{old}}\|_2 > \delta_\phi$$
+**Retraining Trigger.** Surrogate retraining is triggered when routing distribution shift exceeds a calibrated KL threshold:
 
-Retraining uses importance-weighted empirical risk minimization:
+$$\mathbb{E}_{z \sim \mathcal{D}_{\text{trace}}}\!\left[\mathrm{KL}\!\left(\pi_\phi^{\text{new}}(\cdot \mid z) \;\Big\|\; \pi_\phi^{\text{old}}(\cdot \mid z)\right)\right] > \delta_{\mathrm{KL}}$$
 
-$$\min_\psi \sum_i w_i \left\|\hat{\mathbf{c}}_\psi(z_i) - c_i\right\|_2^2 + \eta\|\psi\|_2^2, \qquad w_i = \frac{p_{\text{new}}(z_i)}{p_{\text{old}}(z_i)}$$
+An L2 norm on policy parameters is insufficient: it is reparameterization-sensitive. A large parameter change in an overparameterized region may shift the routing distribution negligibly, while a small change near a decision boundary may flip routing for a substantial fraction of requests. The KL trigger measures actual distribution shift rather than parameter-space distance.
 
-where the density ratio $w_i$ is estimated from a lightweight discriminator trained on the old and new trace distributions. This correction prevents the surrogate from silently degrading the routing policy after each optimization cycle.
+**Calibrating $\delta_{\mathrm{KL}}$.** Set $\delta_{\mathrm{KL}}$ to the 95th percentile of this KL divergence measured over an ensemble of offline random-restart policy optimization experiments on a held-out workload slice. This places the threshold above typical optimization noise, so retraining fires only for policy updates that are unusually large relative to the optimization landscape.
+
+**Retraining Procedure.** Use variance-normalized IW-ERM with clipped importance weights:
+
+$$\min_\psi \sum_i w_i \left\|\mathbf{D}^{-1/2}\!\left(\hat{\mathbf{c}}_\psi(z_i) - c_i\right)\right\|_2^2 + \eta\|\psi\|_2^2, \qquad w_i = \mathrm{clip}\!\left(\frac{p_{\text{new}}(z_i)}{p_{\text{old}}(z_i)},\; \tfrac{1}{10},\; 10\right)$$
+
+where $\mathbf{D}$ is the per-component variance matrix from §3.3, and the density ratio $p_{\text{new}}/p_{\text{old}}$ is estimated from a lightweight binary discriminator trained on old and new trace distributions. Clipping at $[0.1, 10]$ is mandatory: unclipped IS with a neural discriminator has unbounded variance when the old and new routing distributions have near-disjoint support, destabilizing the regression update.
 
 ---
 
@@ -255,13 +275,13 @@ One reason the literal thermodynamic picture is misleading is that the relevant 
 - thermal headroom changes more slowly and has path dependence
 - infrastructure constraints can change over minutes to hours
 
-TBI therefore benefits from a **time-scale separation**:
+TBI enforces a **three-tier control separation** aligned with the Dual-Window Telemetry Architecture (Appendix B):
 
-1. fast loop: routing and serving decisions
-2. medium loop: threshold tuning and scheduler adjustment
-3. slow loop: offline retraining, compression, and policy updates
+1. **Fast serving loop** (sub-ms): routing decisions, gate evaluation, KV cache lookups — driven by fast-window telemetry ($\leq 1$ ms FLOP counters, timestamps, bandwidth)
+2. **Slow control loop** (5–50 ms): DVFS threshold updates, batch-size cap tuning, safety flag propagation — driven by slow-window telemetry ($\geq 5$–$50$ ms thermal, board power, clock state)
+3. **Offline optimization loop** (hours to weeks): surrogate retraining, Lagrange multiplier updates, policy gradient optimization, model compression and distillation — decoupled from real-time inference entirely; outputs enter production only through the evaluation and promotion pipeline (Appendix E, §7 here)
 
-This separation is both scientifically cleaner and operationally safer.
+The fast and slow loops map directly to the two telemetry windows. The offline loop is not a real-time control loop — it is a batch optimization pipeline with weekly or longer cadence.
 
 ---
 
@@ -292,15 +312,15 @@ This risk-constrained formulation is more appropriate than treating all hardware
 
 ## 7. Offline Update Loop
 
-The TBI optimization loop proceeds as follows.
+The TBI optimization loop runs once per deployment cycle (typically weekly) and is strictly decoupled from the real-time serving path.
 
-1. collect traces from deployment
-2. estimate route- and workload-specific costs
-3. fit or update surrogate models; if policy drift exceeds $\|\phi^{\text{new}} - \phi^{\text{old}}\|_2 > \delta_\phi$, retrain with importance weighting (§3.5)
-4. update Lagrange multipliers using derivative-damped dual ascent with hysteresis
-5. generate candidate routing or compression policies
-6. validate candidates on held-out tasks and held-out traces
-7. promote only if they improve the operator's objective
+1. **Collect traces** from the deployment period.
+2. **Estimate costs**: aggregate route-level costs and constraint violations $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$.
+3. **Update or retrain surrogate** $\psi$: if the KL trigger fires (§3.5), run IW-ERM with clipped weights and variance normalization; otherwise run an incremental update on recent traces.
+4. **Update Lagrange multipliers** $\{\lambda_k\}$ with PID-damped dual ascent and hysteresis.
+5. **Optimize routing policy** $\phi$ by policy gradient through Gumbel-Softmax against the updated surrogate and multipliers, for $N_{\text{policy}}$ gradient steps, with $\theta$ and $\psi$ held fixed.
+6. **Validate** candidate $\phi$ on held-out tasks and held-out deployment traces.
+7. **Promote** $\phi$ only if it improves the operator objective and passes all evaluation gates (Appendix E §5).
 
 For step 4, the update rule is:
 
@@ -308,7 +328,7 @@ $$
 \lambda_k^{(t+1)} = \max\!\left(0,\; \lambda_k^{(t)} + \alpha_\lambda \cdot e_k^{(t)} + \mu \cdot \frac{e_k^{(t)} - e_k^{(t-1)}}{\Delta t} \right)
 $$
 
-where $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$ is the exponentially-weighted constraint violation over a window of $W$ requests, $\alpha_\lambda \leq 1 / (L_\psi \cdot W)$ for convergence, and the hysteresis band $\pm\eta_k$ prevents updates when $|e_k^{(t)}| \leq \eta_k$.
+where $\alpha_\lambda \leq 1 / (L_\psi \cdot W)$ and $\mu \leq \alpha_\lambda \Delta t / 2$. Model weights $\theta$ are **never updated in this loop** — they belong exclusively to the compression and distillation pipeline (Appendix E). Jointly updating $\theta$ and $\phi$ here conflates routing adaptation with model mutation.
 
 This makes TBI a closed-loop program without requiring unsafe live mutation.
 

@@ -93,7 +93,7 @@ TBI is formally characterized by four properties:
 The core optimization objective explicitly incorporates real-time physical hardware cost terms, penalizing execution pathways that generate excessive thermal load, FLOP expenditure, or memory bandwidth pressure relative to the marginal improvement in task performance they provide. Hardware cost is a first-order term in the optimization objective, not merely a post-hoc profile.
 
 **Property II — Conditional Runtime Sparsity:**  
-Parameter execution is not monolithic. Worker parameter blocks are maintained in low-power standby states by default and dynamically provisioned into active execution only when routed input complexity demands their engagement. The active computational footprint at any instant is proportional to the informational complexity of the work being resolved.
+Computational work is not monolithic. At the software layer, execution is routed through the cheapest path that meets quality requirements for each request — small models, cached results, shallow exits, or expert subsets — with the deep heavy path invoked only when simpler paths are demonstrably insufficient. The active FLOP and memory-bandwidth footprint at any instant scales with the informational complexity of the request, not with the maximum parameter count of the largest available model.
 
 **Property III — Closed-Loop Telemetry Integration:**  
 Physical hardware telemetry collected during production inference—junction temperatures, FLOP overhead per execution path, memory bandwidth saturation events, DVFS throttle triggers—continuously feeds back into the structural optimization objective. The system evolves lighter execution pathways for context domains that have historically caused thermodynamic bottlenecks.
@@ -174,7 +174,7 @@ flowchart TB
         DLD["Bottleneck Tagging Engine<br/>Vector λ⃗ Adjuster · Next Optimization Input"]:::dl
     end
 
-    HCU -- "T_vec = [τ_j, P_draw, M_util, ω_clock] · sub-ms" --> DLD
+    HCU -- "T_vec = [τ_j, P_draw, M_util, ω_clock] · slow-window (5–50 ms)" --> DLD
     HCU -. "T_vec thermal feedback (async)" .-> EA
     DLD --> OPT(["Training Optimization Phase"]):::io
 ```
@@ -200,17 +200,23 @@ Conflating the two windows — for example, attributing a vendor-reported 10 ms 
 
 $$\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,\, k) + \beta_k$$
 
-where $\alpha_k$ is a per-route joules-per-FLOP coefficient and $\beta_k$ is a per-route static memory-access cost term, both estimated from micro-benchmarks at representative batch shapes. This proxy is deterministic, zero-latency, and immune to NVML polling jitter and idle-power baseline drift.
+where $\alpha_k$ is a per-route joules-per-FLOP coefficient and $\beta_k$ is a per-route memory-access cost term, both estimated from micro-benchmarks at representative batch shapes. This proxy is deterministic, zero-latency, and immune to NVML polling jitter and idle-power baseline drift. The two-parameter form is valid only for **compute-bound paths** (arithmetic intensity $I_k = \mathrm{FLOP}(x,k)/\mathrm{bytes}(x,k)$ above the hardware roofline ridge point $I_k^*$).
+
+**Memory-Bandwidth-Bound Extension.** For memory-bandwidth-bound routes — specifically autoregressive decoding at long context, where KV cache reads dominate — $\beta_k$ must be conditioned on sequence length:
+
+$$\hat{J}_k = \alpha_k \cdot \mathrm{FLOP}(x,k) + \beta_k^{(0)} + \beta_k^{(1)} \cdot L_{\text{seq}}$$
+
+where $\beta_k^{(1)}$ is the per-token KV cache read cost, calibrated from per-layer bandwidth measurements at representative concurrency levels. Evaluations must identify whether each route is compute-bound or memory-bandwidth-bound and apply the appropriate proxy form.
 
 **Sensor-Delay Compensation.** The routing gate at request time consumes $\vec{T}(t - \Delta t_{\text{sensor}})$, a delayed observation with $\Delta t_{\text{sensor}} \in [1, 10]$ ms on commodity accelerators. TBI models this delay explicitly. Threshold updates from the Homeostatic Control Unit are passed through a low-pass filter with cutoff frequency:
 
 $$\omega_c \leq \frac{1}{2\,\Delta t_{\text{sensor}}}$$
 
-The DVFS adjustment controller gain $K$ is bounded by the Nyquist stability condition applied to the delay-augmented plant:
+The DVFS adjustment loop is gain-scheduled. No closed-form gain bound exists without hardware-specific plant identification: the actual DVFS plant is nonlinear (clock states snap between discrete P-states) and thermal plant parameters $(R_\theta, C_\theta)$ are operating-point-dependent. The proportional gain $K$ must satisfy a **45° phase-margin requirement** verified by a standardized step-response stability test: apply a 10°C step in $\tau_{\text{junction}}$ at nominal load and confirm that the closed-loop DVFS response settles within $5\,R_\theta C_\theta$ with less than 15% overshoot. For hardware-uncharacterized deployments, a conservative starting estimate for a linearized first-order thermal plant with pure sensor delay is:
 
-$$K \leq \frac{\pi}{2\,\omega_c\,\Delta t_{\text{sensor}}}$$
+$$K \leq \frac{1}{4\,\omega_c\,\Delta t_{\text{sensor}}\,R_\theta}$$
 
-Gain selections exceeding this bound risk sawtooth oscillation in the DVFS state across the load window and must not be deployed. Temperature remains a **state and safety variable** — the HCU uses it only to trigger conservative, reversible threshold adjustments within prevalidated bounds.
+where $R_\theta$ is the measured junction-to-case thermal resistance (°C/W) at the nominal operating clock state. This estimate must be empirically validated before production deployment. Temperature remains a **state and safety variable** — the HCU uses it only to trigger conservative, reversible threshold adjustments within prevalidated bounds.
 
 → Full specification: [docs/02_tier1_telemetry.md](docs/02_tier1_telemetry.md)
 
@@ -229,11 +235,11 @@ $$C_g \leq \epsilon_f \cdot C_f, \qquad \epsilon_f \in [0.01,\; 0.05]$$
 
 $$C_g \leq \epsilon_n \cdot (1 - p^*)(C_s - C_f), \qquad \epsilon_n \leq 0.10$$
 
-The first constraint — gate overhead at most 1–5% of the fast path's own FLOP and bandwidth budget — prevents the gate from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Any gate architecture that violates either constraint at the observed $p^*$ must be rejected or restructured before deployment.
+The first constraint — gate overhead at most 1–5% of the fast path's own FLOP and bandwidth budget — prevents the gate from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Any gate architecture that violates either constraint at the observed $p^*$ must be rejected or restructured before deployment. $p^*$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. When workload shift causes a previously compliant gate to exceed either constraint at the current $p^*$, a routing-policy review is triggered within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance.
 
-**Shared Embedding Architecture.** If the gate uses a compact encoder to derive request embeddings, that encoder is promoted to a **shared prefill step** executed once per request — its cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Encoder weights must remain as persistent device-memory residents to avoid cold-load latency. The gate's real-time decision logic — threshold evaluation, FSM lookup, telemetry-aware adjustment — must independently satisfy both constraints above at $\leq 1$–$5\%$ of the fast path's combined FLOP and memory-bandwidth budget.
+**Shared Embedding Architecture.** If the gate uses a compact encoder to derive request embeddings, that encoder is promoted to a **shared prefill step** executed once per request — its cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Where the serving stack supports it, encoder weights should be pinned in device memory using platform-specific mechanisms (e.g., NVIDIA MPS memory locking, PyTorch persistent allocation pools) to minimize cold-load latency; on stacks without memory-pinning APIs, the encoder must be excluded from the KV cache eviction pool under a separate allocation policy, and cold-load latency penalties must be measured and reported (if they exceed $0.1 \times C_g$, the shared-prefill amortization benefit must be recalculated). The gate's real-time decision logic — threshold evaluation, FSM lookup, telemetry-aware adjustment — must independently satisfy both constraints above at $\leq 1$–$5\%$ of the fast path's combined FLOP and memory-bandwidth budget.
 
-**Coverage Requirement.** Routing gains are highly workload-dependent. Any evaluation must report the risk-coverage curve across the full empirical range of escalation rates $p \in [0, 1]$. The gate must demonstrate positive thermodynamic ROI at the 90th-percentile $p$ value observed in production traffic. Efficiency claims reported only at the median operating point are insufficient for publication-grade evaluation.
+**Coverage Requirement.** Routing gains are highly workload-dependent. Any evaluation must report the risk-coverage curve across the full empirical range of escalation rates $p \in [0, 1]$. The gate must demonstrate positive thermodynamic ROI at the 90th-percentile escalation rate $p_{90}$ observed in production traffic. ROI is necessarily negative at $p \to 1$ (gate executes with zero savings), so the requirement applies up to $p_{90}$, not universally across $p \in [0, 1]$. Efficiency claims reported only at the median escalation rate are insufficient for publication-grade evaluation.
 
 → Full specification: [docs/03_tier2_routing.md](docs/03_tier2_routing.md)
 
@@ -282,18 +288,24 @@ where $E_{\text{daemon}}$ is the measured energy cost of the daemon run, $|\Delt
 
 $$\frac{\partial\,|\Delta J_{\text{saving}}|}{\partial\,n_{\text{rounds}}} \leq \kappa$$
 
-Running daemon iterations past this boundary inverts the energy ROI and is treated as a configuration defect.
+Running daemon iterations past this boundary inverts the energy ROI and is treated as a configuration defect. The threshold $\kappa$ is calibrated as the 10th percentile of per-round $|\Delta J_{\text{saving}}|$ observed during the first three daemon rounds on the target model and workload, placing the stopping boundary below the empirical minimum productive improvement.
 
 **Grid-Aware Efficiency Policy.** TBI's thermodynamic framing requires that energy accounting not conflate Joule consumption with carbon impact. Off-peak scheduling that minimizes GPU idle time can worsen grid carbon intensity when off-peak hours are served by baseload carbon generation rather than renewable dispatch. TBI therefore mandates a **Grid-Aware Efficiency Policy** for daemon scheduling:
 
-- Daemon windows are scheduled against a real-time grid carbon-intensity forecast (e.g., WattTime or Electricity Maps). Daemon execution is preferred when marginal grid carbon intensity $\gamma(t)$ is at or below the rolling 24-hour median $\bar{\gamma}$.
+- Daemon windows are scheduled against a real-time grid carbon-intensity forecast (e.g., WattTime or Electricity Maps). Daemon execution is preferred when marginal grid carbon intensity $\gamma(t)$ is at or below the rolling 24-hour median $\bar{\gamma}_{24h}$.
 - The effective thermodynamic scheduling metric is the carbon-adjusted energy cost $E_{\text{carbon}} = E_{\text{daemon}} \cdot \gamma(t)$, not raw Joules alone.
+
+**Carbon-Unified Amortization.** When Grid-Aware scheduling is active, the Joule-denominated amortization gate and the carbon scheduling metric must share a unified objective. A daemon that runs longer at low $\gamma(t)$ may consume more Joules but fewer kg CO₂e; the Joule gate alone would incorrectly reject it. In carbon-accounting mode, the amortization gate uses carbon-equivalent units:
+
+$$\frac{E_{\text{daemon}} \cdot \gamma(t_{\text{run}})}{|\Delta J_{\text{serving}}| \cdot \bar{\gamma}_{24h} \cdot R_{\text{projected}}} \leq H_{\text{amortize}}$$
+
+where $\gamma(t_{\text{run}})$ is the actual grid carbon intensity at daemon execution time and $\bar{\gamma}_{24h}$ is the rolling 24-hour median used to estimate forward serving-time carbon savings. When Grid-Aware scheduling is inactive, the original Joule-denominated gate applies.
 
 **Thermal Recovery Gap.** Daemon runs at full GPU utilization delay thermal recovery of the package. A mandatory cooldown gap $\Delta t_{\text{cool}}$ is enforced between the end of any daemon window and the start of the subsequent peak traffic window:
 
-$$\Delta t_{\text{cool}} \geq R_\theta C_\theta \ln\!\left(\frac{\tau_{\text{daemon}} - \tau_{\text{ambient}}}{\tau_{\text{target}} - \tau_{\text{ambient}}}\right)$$
+$$\Delta t_{\text{cool}} \geq 1.5 \cdot R_\theta C_\theta \ln\!\left(\frac{\tau_{\text{daemon}} - \tau_{\text{ambient}}}{\tau_{\text{target}} - \tau_{\text{ambient}}}\right)$$
 
-where $R_\theta$ is the package thermal resistance, $C_\theta$ is thermal capacitance, $\tau_{\text{daemon}}$ is the measured junction temperature at daemon completion, and $\tau_{\text{target}}$ is the peak-traffic thermal headroom target. Where hardware thermal models are unavailable, this window defaults to empirical measurement across at least 20 run-cooldown cycles on the target hardware class.
+where $R_\theta$ and $C_\theta$ are the thermal resistance and capacitance of the **dominant thermal node** — junction-to-heatsink for air-cooled hardware, junction-to-coolant for liquid-cooled hardware (from package datasheets). The 1.5× safety factor accounts for multi-node thermal coupling: GPU packages exhibit a cascade of thermal nodes (die, package, TIM, heatsink) with distinct time constants; the single-pole formula underestimates recovery time when the heatsink has not equilibrated. Where hardware thermal models are unavailable, this window defaults to empirical measurement across at least 20 run-cooldown cycles; the bound must be set at the **95th percentile** of measured recovery times, not the mean.
 
 The combined effect is a self-optimization lifecycle that is verifiably net-positive over each amortization horizon — bounded by both the hardware envelope and the carbon envelope of the grid it inhabits.
 
@@ -364,21 +376,35 @@ $$
 \lambda_k^{(t+1)} = \max\!\left(0,\; \lambda_k^{(t)} + \alpha_\lambda \cdot e_k^{(t)} + \mu \cdot \frac{e_k^{(t)} - e_k^{(t-1)}}{\Delta t} \right)
 $$
 
-where $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$ is the constraint violation measured as an exponentially-weighted moving average over a window of $W$ requests, $\alpha_\lambda$ is the proportional gain, and $\mu$ is the derivative damping coefficient. The proportional gain satisfies:
+where $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$ is the constraint violation measured as an exponentially-weighted moving average over a window of $W$ requests, $\alpha_\lambda$ is the proportional gain, and $\mu$ is the derivative damping coefficient. Both gains are bounded:
 
-$$\alpha_\lambda \leq \frac{1}{L_\psi \cdot W}$$
+$$\alpha_\lambda \leq \frac{1}{L_\psi \cdot W}, \qquad \mu \leq \frac{\alpha_\lambda \cdot \Delta t}{2}$$
 
-where $L_\psi$ is the Lipschitz constant of the surrogate cost model $\hat{\mathbf{c}}_\psi$. A hysteresis band of width $\pm\eta_k$ around each constraint boundary $B_k$ prevents rapid multiplier cycling under borderline violation conditions: the multiplier updates only when $|e_k^{(t)}| > \eta_k$.
+The bound on $\alpha_\lambda$ follows from the Lipschitz condition on the surrogate; $L_\psi$ is estimated empirically as the maximum observed $\|\hat{\mathbf{c}}_\psi(z) - \hat{\mathbf{c}}_\psi(z')\| / \|z - z'\|$ over a held-out calibration set, or enforced by spectral normalization of the surrogate network layers. The bound on $\mu$ prevents the discrete derivative term from reversing the proportional step direction under sustained constraint violation — exceeding it destabilizes the multiplier in the same way as an oversized $\alpha_\lambda$. A hysteresis band of width $\pm\eta_k$ around each constraint boundary $B_k$ prevents rapid multiplier cycling: the multiplier updates only when $|e_k^{(t)}| > \eta_k$.
 
-**Importance-Weighted Surrogate Retraining.** The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, covariate shift invalidates the surrogate on the new request distribution. Surrogate retraining is triggered whenever:
+**Importance-Weighted Surrogate Retraining.** The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, covariate shift invalidates the surrogate on the new request distribution. Surrogate retraining is triggered when routing distribution shift exceeds a calibrated KL threshold:
 
-$$\|\phi^{\text{new}} - \phi^{\text{old}}\|_2 > \delta_\phi$$
+$$\mathbb{E}_{z \sim \mathcal{D}_{\text{trace}}}\!\left[\mathrm{KL}\!\left(\pi_\phi^{\text{new}}(\cdot \mid z) \;\Big\|\; \pi_\phi^{\text{old}}(\cdot \mid z)\right)\right] > \delta_{\mathrm{KL}}$$
 
-Retraining uses importance-weighted empirical risk minimization:
+This trigger is reparameterization-invariant. An L2 norm on policy parameters misfires under overparameterization: a small weight change near a decision boundary can flip routing for many requests, while a large weight change in an overparameterized region may change nothing. $\delta_{\mathrm{KL}}$ is calibrated to the 95th percentile of this KL divergence over an ensemble of offline random-restart policy optimization runs on a held-out workload slice.
 
-$$\min_\psi \sum_i w_i \left\|\hat{\mathbf{c}}_\psi(z_i) - c_i\right\|_2^2 + \eta\|\psi\|_2^2, \qquad w_i = \frac{p_{\text{new}}(z_i)}{p_{\text{old}}(z_i)}$$
+Retraining uses variance-normalized, importance-weighted empirical risk minimization with clipped weights:
 
-where the density ratio $w_i$ is estimated from a lightweight discriminator trained on the old and new trace distributions. This correction prevents the surrogate from silently degrading the routing policy after each optimization cycle.
+$$\min_\psi \sum_i w_i \left\|\mathbf{D}^{-1/2}\!\left(\hat{\mathbf{c}}_\psi(z_i) - c_i\right)\right\|_2^2 + \eta\|\psi\|_2^2, \qquad w_i = \mathrm{clip}\!\left(\frac{p_{\text{new}}(z_i)}{p_{\text{old}}(z_i)},\; \tfrac{1}{10},\; 10\right)$$
+
+where $\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$ is the empirical per-component variance matrix of the cost vector in the trace dataset. Variance normalization prevents the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) from dominating the regression objective. The weight clip at $[0.1, 10]$ bounds IS variance — unclipped density ratios from a neural discriminator can have unbounded variance when old and new routing distributions have near-disjoint support. The binary throttling indicator $\chi$ is trained with a separate cross-entropy head; the total surrogate loss sums the normalized-MSE regression heads $(J, L, M)$ and the cross-entropy head $(\chi)$.
+
+**Unit Normalization Convention.** All cost terms entering the Lagrangian are normalized: $J$ in millijoules-per-token, $L$ in milliseconds, $M$ in gigabytes-per-request. Lagrange multipliers $\lambda_k$ carry the reciprocal units, ensuring the step-size bound $\alpha_\lambda \leq 1/(L_\psi W)$ is evaluated in consistent dimensions across all constraint types.
+
+**Optimization Loop Structure.** The three adaptation mechanisms above operate at different time scales and must not be interleaved unsafely. The canonical outer loop, executed once per deployment cycle (typically weekly):
+
+1. **Collect traces** from the deployment period.
+2. **Retrain surrogate** $\psi$ — with IW correction and variance normalization if the KL trigger fires — on traces collected under $\pi_\phi^{\text{old}}$.
+3. **Update multipliers** $\{\lambda_k\}$ with PID-damped dual ascent using constraint violations from the deployment period.
+4. **Optimize policy** $\phi$ by policy gradient through Gumbel-Softmax against the updated surrogate and multipliers, for $N_{\text{policy}}$ gradient steps, with $\theta$ and $\psi$ held fixed.
+5. **Promote** the updated $\phi$ through the evaluation pipeline if it improves the operator objective.
+
+Model weights $\theta$ are **never updated in this loop** — they belong exclusively to the distillation and compression pipeline (§4.4). Jointly updating $\theta$ and $\phi$ here conflates routing adaptation with model mutation and violates the separation of online and offline actions.
 
 In TBI, physical costs are not assumed to be analytically differentiable with respect to all model weights. Optimization operates over the **controllable decisions** — route choice, depth, expert selection, precision, compression level, and architecture choice — with the mechanisms above ensuring the optimization loop is stable, self-correcting, and free of duality-gap pathologies on discrete action spaces.
 

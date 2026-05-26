@@ -1,23 +1,12 @@
-# tbi-spec: Thermodynamically Bounded Intelligence — Open Technical Specification
+# Thermodynamically Bounded Intelligence
 
-> **Status:** Foundational Specification
-> **Classification:** Open Research Blueprint
-> **Domain:** AI Systems Architecture · Hardware-Aware Machine Learning · Distributed Inference Engineering
+_Open Technical Specification_
 
+> **Status:** Research Draft
+> **Type:** Technical Proposal
+> **Domain:** AI Systems Architecture · Hardware-Aware ML · Efficient Inference
 
 ## Abstract
-
- # Thermodynamically Bounded Intelligence
-
- ## A Research Whitepaper on Energy-Constrained Adaptive Inference
-
- **Status:** Research Whitepaper Draft  
- **Classification:** Systems and ML Co-Design Proposal  
- **Domain:** Adaptive Inference, Hardware-Aware Optimization, Efficient Model Serving
-
- ---
-
- ## Abstract
 
  Large-scale machine learning systems are increasingly constrained not only by data and compute availability, but by deployment-time physical limits: energy draw, cooling capacity, memory bandwidth, latency targets, and thermal safety margins. Standard training objectives optimize task quality directly, while these deployment costs are usually handled later through engineering heuristics such as quantization, pruning, distillation, batching, and serving-time routing. This separation is practical, but incomplete: it leaves substantial efficiency gains unavailable to objectives that never observe deployment costs.
 
@@ -283,11 +272,8 @@ This repository constitutes the open technical specification for the TBI referen
 
 ## Table of Contents
 
-- [tbi-spec: Thermodynamically Bounded Intelligence — Open Technical Specification](#tbi-spec-thermodynamically-bounded-intelligence--open-technical-specification)
-  - [Abstract](#abstract)
 - [Thermodynamically Bounded Intelligence](#thermodynamically-bounded-intelligence)
-  - [A Research Whitepaper on Energy-Constrained Adaptive Inference](#a-research-whitepaper-on-energy-constrained-adaptive-inference)
-  - [Abstract](#abstract-1)
+  - [Abstract](#abstract)
   - [1. Problem Statement](#1-problem-statement)
   - [2. Core Thesis](#2-core-thesis)
   - [3. Scope and Non-Goals](#3-scope-and-non-goals)

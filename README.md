@@ -36,6 +36,7 @@ The TBI proposal has two parts. The first is a **near-term software path** that 
   - [4.2 Adaptive Routing](#42-adaptive-routing)
   - [4.3 Conditional Depth and Specialization](#43-conditional-depth-and-specialization)
   - [4.4 Offline Optimization Pipeline](#44-offline-optimization-pipeline)
+  - [4.5 Self-Optimization Lifecycle](#45-self-optimization-lifecycle)
 - [5. Scientific Positioning](#5-scientific-positioning)
 - [6. Formal Summary](#6-formal-summary)
 - [7. Feasibility Summary](#7-feasibility-summary)
@@ -86,6 +87,20 @@ TBI advances four claims.
 4. **Near-term and long-term claims must be separated.**  
    Adaptive routing, early exit, MoE-style specialization, compression, and offline retraining are feasible today. Fine-grained hot, warm, and cold parameter residency across SRAM, HBM, and non-volatile storage is a future hardware research direction.
 
+TBI is formally characterized by four properties:
+
+**Property I — Hardware-Aware Optimization:**  
+The core optimization objective explicitly incorporates real-time physical hardware cost terms, penalizing execution pathways that generate excessive thermal load, FLOP expenditure, or memory bandwidth pressure relative to the marginal improvement in task performance they provide. Hardware cost is a first-order term in the optimization objective, not merely a post-hoc profile.
+
+**Property II — Conditional Runtime Sparsity:**  
+Parameter execution is not monolithic. Worker parameter blocks are maintained in low-power standby states by default and dynamically provisioned into active execution only when routed input complexity demands their engagement. The active computational footprint at any instant is proportional to the informational complexity of the work being resolved.
+
+**Property III — Closed-Loop Telemetry Integration:**  
+Physical hardware telemetry collected during production inference—junction temperatures, FLOP overhead per execution path, memory bandwidth saturation events, DVFS throttle triggers—continuously feeds back into the structural optimization objective. The system evolves lighter execution pathways for context domains that have historically caused thermodynamic bottlenecks.
+
+**Property IV — Autonomous Background Maintenance:**  
+During periods of reduced external query load, the system autonomously executes maintenance daemons that prune redundant parameters, consolidate episodic memory indices, and distill knowledge into more compact structural representations. This self-optimization lifecycle operates entirely within the thermal and power envelopes reported by the hardware telemetry substrate.
+
 ---
 
 ## 3. Scope and Non-Goals
@@ -111,23 +126,83 @@ TBI advances four claims.
 
 ## 4. Architectural Overview
 
-TBI organizes deployment into four interacting layers.
+TBI organizes deployment into four interacting layers. The diagram below maps the primary data-flow paths, control signals, and feedback loops between all architectural components.
+
+```mermaid
+%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 48, "rankSpacing": 72}}}%%
+flowchart TB
+    classDef tier1 fill:#0d3349,stroke:#4db8d4,stroke-width:2px,color:#cce7f5
+    classDef tier2 fill:#1a0d33,stroke:#9b59b6,stroke-width:2px,color:#e8d5ff
+    classDef tier3 fill:#0d3318,stroke:#27ae60,stroke-width:2px,color:#d5ffe5
+    classDef fp    fill:#332200,stroke:#f39c12,stroke-width:2px,color:#fff3cc
+    classDef dl    fill:#330d0d,stroke:#e74c3c,stroke-width:2px,color:#ffd5d5
+    classDef io    fill:#1a1a2a,stroke:#95a5a6,stroke-width:2px,color:#ffffff
+
+    INPUT(["Context Input<br/>Inbound API Stream"]):::io
+
+    subgraph T2["TIER 2 — Asynchronous Routing & Gating Bus"]
+        direction LR
+        EA["Entropy Assessor<br/>(Shallow Gate / Proxy Model)"]:::tier2
+        ESM["Execution State Manager<br/>(Routing Table / FSM)"]:::tier2
+        EA --> ESM
+    end
+
+    INPUT --> EA
+
+    subgraph FP["Static / Compiled Fast Path"]
+        FPD["Lookup Tables · Cached Fields<br/>Ultra-Light Models · KV Cache"]:::fp
+    end
+
+    subgraph T3["TIER 3 — Sparse Worker Blocks"]
+        T3D["Dynamic Activation · Layer-Gating / Early-Exit<br/>On-Chip Worker Pools · SRAM Mapping"]:::tier3
+    end
+
+    ESM -- "Low-Entropy Path" --> FPD
+    ESM -- "High-Entropy Trigger" --> T3D
+
+    subgraph T1["TIER 1 — Telemetry & Bare-Metal Substrate Layer"]
+        direction LR
+        HIB["Hardware Interface Bus<br/>(NVML / DCGM / ASIC Counters)"]:::tier1
+        HCU["Homeostatic Control Unit<br/>(DVFS Loop / Power States)"]:::tier1
+        HIB --> HCU
+    end
+
+    FPD -- "Execution Results + FLOP + Telemetry" --> HIB
+    T3D -- "Execution Results + FLOP + Telemetry" --> HIB
+
+    subgraph DL["Telemetry Feedback Data Lake"]
+        DLD["Bottleneck Tagging Engine<br/>Vector λ⃗ Adjuster · Next Optimization Input"]:::dl
+    end
+
+    HCU -- "T_vec = [τ_j, P_draw, M_util, ω_clock] · sub-ms" --> DLD
+    HCU -. "T_vec thermal feedback (async)" .-> EA
+    DLD --> OPT(["Training Optimization Phase"]):::io
+```
+
+> **Note:** Dashed arrows represent background asynchronous signals. The T_vec feedback path from Tier 1 to the Data Lake is a non-blocking async write stream and does not gate the primary inference path.
+
+---
 
 ### 4.1 Measurement and Control
 
-A telemetry layer records power, energy proxies, latency, memory pressure, clock state, throttle indicators, and thermal headroom. These signals are used for diagnosis and control. Temperature is treated primarily as a **state and safety variable**, not as a precise per-request optimization target.
+A telemetry layer records a continuous state vector $\vec{T}$ representing the real-time physical operational state of every execution node:
+
+$$\vec{T} = [\tau_{\text{junction}},\; P_{\text{draw}},\; M_{\text{util}},\; \omega_{\text{clock}}]$$
+
+These signals cover power, energy proxies, latency, memory pressure, clock state, throttle indicators, and thermal headroom. A **Homeostatic Control Unit** applies DVFS adjustments to maintain all nodes within their safe operating envelopes. Temperature is treated primarily as a **state and safety variable**, not as a precise per-request optimization target.
+
+→ Full specification: [docs/02_tier1_telemetry.md](docs/02_tier1_telemetry.md)
 
 ### 4.2 Adaptive Routing
 
-A lightweight gate decides whether a request should be served by:
+An **Entropy Assessor**—a deliberately shallow, computationally inexpensive gating sub-network or heuristic proxy—evaluates the informational complexity of each inbound context vector before any heavy computation is engaged. Based on this assessment, it routes to one of two execution paths:
 
-- a cache or retrieval answer
-- a small model
-- a shallow path through a larger model
-- a full model path
-- a specialized expert or domain model
+- **Fast Path (Low-Entropy):** Routine, low-variance inputs are resolved using compiled lookup tables, cached activation fields, or ultra-lightweight models at near-zero energy expenditure.
+- **Slow Path (High-Entropy):** Complex, high-variance inputs trigger provisioning of the appropriate deep worker block clusters.
 
 The gate may use prompt features, embeddings, recent telemetry state, calibration statistics, and retrieval signals.
+
+→ Full specification: [docs/03_tier2_routing.md](docs/03_tier2_routing.md)
 
 ### 4.3 Conditional Depth and Specialization
 
@@ -139,6 +214,10 @@ Within the heavy path, the system may still save work through:
 - precision control
 - batching and scheduling policies that adapt to current system state
 
+**Layer-gating mechanics** allow inference to issue an early-exit return at intermediate layer $N$ when a high-confidence prediction threshold has been met, bypassing the computational cost of all subsequent layers—potentially eliminating a substantial fraction of the total FLOP budget for a given token prediction.
+
+→ Full specification: [docs/04_tier3_sparse_workers.md](docs/04_tier3_sparse_workers.md)
+
 ### 4.4 Offline Optimization Pipeline
 
 Deployment traces are used to generate new candidates:
@@ -149,6 +228,20 @@ Deployment traces are used to generate new candidates:
 - improved retrieval or cache indexes
 
 Promotion into production occurs only after offline evaluation and staged rollout.
+
+### 4.5 Self-Optimization Lifecycle
+
+When external query traffic falls below a configurable threshold, or during designated maintenance windows, TBI transitions available compute into **autonomous background optimization daemons**. These daemons execute entirely within the physical constraints reported by the Tier 1 telemetry substrate and require no external orchestration. Three primary daemon classes are defined:
+
+| Daemon Class | Function | Mechanism |
+| --- | --- | --- |
+| **Sparsity Daemons** | Eliminate redundant parameters | Magnitude and gradient-based pruning passes; heavy quantization of low-contribution weights |
+| **Memory Index Consolidation (Samskaras)** | Compress episodic inference logs | Background merge of transactional records into high-dimensional relational vector anchors |
+| **Recursive Knowledge Distillation** | Compact the model's own parameter density | Automated self-play loops training a sub-model to mirror heavy cluster outputs under a constrained FLOP budget |
+
+The combined effect of these daemons is continuous, autonomous reduction of the system's own thermodynamic footprint over its operational lifetime—a form of structural self-improvement bounded entirely by the hardware envelope it inhabits.
+
+→ Full specification: [docs/05_background_daemons.md](docs/05_background_daemons.md)
 
 ---
 

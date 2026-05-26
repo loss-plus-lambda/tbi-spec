@@ -1,4 +1,4 @@
-# Thermodynamically Bounded Intelligence
+# Thermodynamically Bounded Intelligence (TBI)
 
 _Open Technical Specification_
 

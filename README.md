@@ -27,7 +27,6 @@ The TBI proposal has two parts. The first is a **near-term software path** that 
 - [Thermodynamically Bounded Intelligence](#thermodynamically-bounded-intelligence)
   - [Motivation](#motivation)
   - [Abstract](#abstract)
-  - [Table of Contents](#table-of-contents)
   - [1. Problem Statement](#1-problem-statement)
   - [2. Core Thesis](#2-core-thesis)
   - [3. Scope and Non-Goals](#3-scope-and-non-goals)

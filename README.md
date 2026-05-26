@@ -275,9 +275,9 @@ When external query traffic falls below a configurable threshold, or during desi
 
 | Daemon Class | Function | Mechanism |
 | --- | --- | --- |
-| **Sparsity Daemons** | Eliminate redundant parameters | Magnitude and gradient-based pruning passes; heavy quantization of low-contribution weights |
+| **Sparsity Daemons (Viveka)** | Eliminate redundant parameters | Magnitude and gradient-based pruning passes; heavy quantization of low-contribution weights |
 | **Memory Index Consolidation (Samskaras)** | Compress episodic inference logs | Background merge of transactional records into high-dimensional relational vector anchors |
-| **Recursive Knowledge Distillation** | Compact the model's own parameter density | Automated self-play loops training a sub-model to mirror heavy cluster outputs under a constrained FLOP budget |
+| **Recursive Knowledge Distillation (Sutra)** | Compact the model's own parameter density | Automated self-play loops training a sub-model to mirror heavy cluster outputs under a constrained FLOP budget |
 
 **Net-Negative Joule Amortization Constraint.** No daemon class is thermodynamically justified by its intent alone. Every candidate promotion must pass a mandatory energy amortization gate before entering the staging pipeline:
 

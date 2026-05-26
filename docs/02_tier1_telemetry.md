@@ -69,7 +69,7 @@ Gathered at kernel or micro-batch granularity with zero sensor lag. These signal
 - route-level request timestamps
 - achieved memory bandwidth
 
-### 3.2 Slow Window ($\geq 5$–$50$ ms)
+### 3.2 Slow Window ($\geq 5\text{–}50$ ms)
 
 Many vendor telemetry APIs expose values at millisecond or multi-millisecond resolution. These signals are consumed **exclusively as control and safety inputs** — they must not be used as per-request cost targets:
 
@@ -241,7 +241,7 @@ The following claims must not be made without hardware-specific evidence:
 
 The following are defined as hard architectural requirements and may be positively asserted when the implementation conforms:
 
-- the dual-window separation between fast ($\leq 1$ ms) and slow ($\geq 5$–$50$ ms) telemetry paths
+- the dual-window separation between fast ($\leq 1$ ms) and slow ($\geq 5\text{–}50$ ms) telemetry paths
 - the FLOP-count analytical proxy $\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,k) + \beta_k$ as the primary per-route energy estimator
 - the low-pass filter bound $\omega_c \leq 1 / (2\,\Delta t_{\text{sensor}})$ on DVFS controller updates
 - the empirically validated DVFS controller gain bound (45° phase-margin step-response test, §7.1), with conservative starting estimate $K \leq 1/(4\,\omega_c\,\Delta t_{\text{sensor}}\,R_\theta)$

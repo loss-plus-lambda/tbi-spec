@@ -24,32 +24,34 @@ The TBI proposal has two parts. The first is a **near-term software path** that 
 
 ## Table of Contents
 
-- [Motivation](#motivation)
-- [Abstract](#abstract)
-- [1. Problem Statement](#1-problem-statement)
-- [2. Core Thesis](#2-core-thesis)
-- [3. Scope and Non-Goals](#3-scope-and-non-goals)
-  - [In Scope](#in-scope)
-  - [Out of Scope](#out-of-scope)
-- [4. Architectural Overview](#4-architectural-overview)
-  - [4.1 Measurement and Control](#41-measurement-and-control)
-  - [4.2 Adaptive Routing](#42-adaptive-routing)
-  - [4.3 Conditional Depth and Specialization](#43-conditional-depth-and-specialization)
-  - [4.4 Offline Optimization Pipeline](#44-offline-optimization-pipeline)
-  - [4.5 Self-Optimization Lifecycle](#45-self-optimization-lifecycle)
-- [5. Scientific Positioning](#5-scientific-positioning)
-- [6. Formal Summary](#6-formal-summary)
-- [7. Feasibility Summary](#7-feasibility-summary)
-- [8. Experimental Program](#8-experimental-program)
-  - [Stage 1: Instrumentation and Baseline](#stage-1-instrumentation-and-baseline)
-  - [Stage 2: Adaptive Routing](#stage-2-adaptive-routing)
-  - [Stage 3: Conditional Depth and Compression](#stage-3-conditional-depth-and-compression)
-  - [Stage 4: Closed-Loop Offline Adaptation](#stage-4-closed-loop-offline-adaptation)
-  - [Stage 5: Custom Hardware Research](#stage-5-custom-hardware-research)
-- [9. Documentation Guide](#9-documentation-guide)
-- [10. Selected Prior Work](#10-selected-prior-work)
-- [11. Closing Position](#11-closing-position)
-- [License](#license)
+- [Thermodynamically Bounded Intelligence](#thermodynamically-bounded-intelligence)
+  - [Motivation](#motivation)
+  - [Abstract](#abstract)
+  - [Table of Contents](#table-of-contents)
+  - [1. Problem Statement](#1-problem-statement)
+  - [2. Core Thesis](#2-core-thesis)
+  - [3. Scope and Non-Goals](#3-scope-and-non-goals)
+    - [In Scope](#in-scope)
+    - [Out of Scope](#out-of-scope)
+  - [4. Architectural Overview](#4-architectural-overview)
+    - [4.1 Measurement and Control](#41-measurement-and-control)
+    - [4.2 Adaptive Routing](#42-adaptive-routing)
+    - [4.3 Conditional Depth and Specialization](#43-conditional-depth-and-specialization)
+    - [4.4 Offline Optimization Pipeline](#44-offline-optimization-pipeline)
+    - [4.5 Self-Optimization Lifecycle](#45-self-optimization-lifecycle)
+  - [5. Scientific Positioning](#5-scientific-positioning)
+  - [6. Formal Summary](#6-formal-summary)
+  - [7. Feasibility Summary](#7-feasibility-summary)
+  - [8. Experimental Program](#8-experimental-program)
+    - [Stage 1: Instrumentation and Baseline](#stage-1-instrumentation-and-baseline)
+    - [Stage 2: Adaptive Routing](#stage-2-adaptive-routing)
+    - [Stage 3: Conditional Depth and Compression](#stage-3-conditional-depth-and-compression)
+    - [Stage 4: Closed-Loop Offline Adaptation](#stage-4-closed-loop-offline-adaptation)
+    - [Stage 5: Custom Hardware Research](#stage-5-custom-hardware-research)
+  - [9. Documentation Guide](#9-documentation-guide)
+  - [10. Selected Prior Work](#10-selected-prior-work)
+  - [11. Closing Position](#11-closing-position)
+  - [License](#license)
 
 ---
 
@@ -192,7 +194,7 @@ $$\vec{T} = [\tau_{\text{junction}},\; P_{\text{draw}},\; M_{\text{util}},\; \om
 **Dual-Window Telemetry Architecture.** These signals operate on fundamentally incompatible time scales and must not be collapsed into a single polling loop. TBI enforces a strict two-window separation:
 
 - **Fast window** ($\leq 1$ ms): kernel-level FLOP counters, request timestamps, achieved memory bandwidth, and route-level latency. These are gathered at kernel or micro-batch granularity with zero sensor lag and form the primary optimization substrate.
-- **Slow window** ($\geq 5$–$50$ ms): junction temperature, DVFS state, board power, and thermal headroom. These are consumed exclusively as control and safety signals, not as per-request cost targets.
+- **Slow window** ($\geq 5\text{–}50$ ms): junction temperature, DVFS state, board power, and thermal headroom. These are consumed exclusively as control and safety signals, not as per-request cost targets.
 
 Conflating the two windows — for example, attributing a vendor-reported 10 ms power average to a 3 ms token generation event — produces systematic attribution errors that corrupt both surrogate cost models and routing policies. The separation is a hard architectural requirement.
 
@@ -229,15 +231,15 @@ An **Entropy Assessor** — a deliberately shallow, computationally inexpensive 
 
 The gate may use prompt features, embeddings, recent telemetry state, calibration statistics, and retrieval signals.
 
-**Formal Gate Efficiency Constraint.** The Entropy Assessor is thermodynamically justified only when its execution overhead is bounded by the savings it enables. Let $C_g$ denote the total gate cost in combined FLOPs and memory bandwidth, $C_f$ the fast-path cost, $C_s$ the slow-path cost, and $p^*$ the expected escalation rate on the target workload. Two independent constraints must both hold:
+**Formal Gate Efficiency Constraint.** The Entropy Assessor is thermodynamically justified only when its execution overhead is bounded by the savings it enables. Let $C_g$ denote the total gate cost in combined FLOPs and memory bandwidth, $C_f$ the fast-path cost, $C_s$ the slow-path cost, and $p^{\ast}$ the expected escalation rate on the target workload. Two independent constraints must both hold:
 
 $$C_g \leq \epsilon_f \cdot C_f, \qquad \epsilon_f \in [0.01,\; 0.05]$$
 
 $$C_g \leq \epsilon_n \cdot (1 - p^*)(C_s - C_f), \qquad \epsilon_n \leq 0.10$$
 
-The first constraint — gate overhead at most 1–5% of the fast path's own FLOP and bandwidth budget — prevents the gate from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Any gate architecture that violates either constraint at the observed $p^*$ must be rejected or restructured before deployment. $p^*$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. When workload shift causes a previously compliant gate to exceed either constraint at the current $p^*$, a routing-policy review is triggered within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance.
+The first constraint — gate overhead at most 1–5% of the fast path's own FLOP and bandwidth budget — prevents the gate from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Any gate architecture that violates either constraint at the observed $p^{\ast}$ must be rejected or restructured before deployment. $p^{\ast}$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. When workload shift causes a previously compliant gate to exceed either constraint at the current $p^{\ast}$, a routing-policy review is triggered within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance.
 
-**Shared Embedding Architecture.** If the gate uses a compact encoder to derive request embeddings, that encoder is promoted to a **shared prefill step** executed once per request — its cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Where the serving stack supports it, encoder weights should be pinned in device memory using platform-specific mechanisms (e.g., NVIDIA MPS memory locking, PyTorch persistent allocation pools) to minimize cold-load latency; on stacks without memory-pinning APIs, the encoder must be excluded from the KV cache eviction pool under a separate allocation policy, and cold-load latency penalties must be measured and reported (if they exceed $0.1 \times C_g$, the shared-prefill amortization benefit must be recalculated). The gate's real-time decision logic — threshold evaluation, FSM lookup, telemetry-aware adjustment — must independently satisfy both constraints above at $\leq 1$–$5\%$ of the fast path's combined FLOP and memory-bandwidth budget.
+**Shared Embedding Architecture.** If the gate uses a compact encoder to derive request embeddings, that encoder is promoted to a **shared prefill step** executed once per request — its cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Where the serving stack supports it, encoder weights should be pinned in device memory using platform-specific mechanisms (e.g., NVIDIA MPS memory locking, PyTorch persistent allocation pools) to minimize cold-load latency; on stacks without memory-pinning APIs, the encoder must be excluded from the KV cache eviction pool under a separate allocation policy, and cold-load latency penalties must be measured and reported (if they exceed $0.1 \times C_g$, the shared-prefill amortization benefit must be recalculated). The gate's real-time decision logic — threshold evaluation, FSM lookup, telemetry-aware adjustment — must independently satisfy both constraints above at $\leq 1\text{–}5\%$ of the fast path's combined FLOP and memory-bandwidth budget.
 
 **Coverage Requirement.** Routing gains are highly workload-dependent. Any evaluation must report the risk-coverage curve across the full empirical range of escalation rates $p \in [0, 1]$. The gate must demonstrate positive thermodynamic ROI at the 90th-percentile escalation rate $p_{90}$ observed in production traffic. ROI is necessarily negative at $p \to 1$ (gate executes with zero savings), so the requirement applies up to $p_{90}$, not universally across $p \in [0, 1]$. Efficiency claims reported only at the median escalation rate are insufficient for publication-grade evaluation.
 
@@ -352,13 +354,7 @@ where $g_\phi(x, s)$ are the gate logits, $\tau_{\text{temp}}$ is a temperature 
 The Lagrangian relaxation is applied to the **continuous** policy parameters and surrogate cost terms:
 
 $$
-\min_{\theta, \phi, a} \;\mathbb{E}\!\left[
-\mathcal{L}_{\text{task}}
-+ \lambda_J J
-+ \lambda_L L
-+ \lambda_M M
-+ \lambda_\chi \chi
-\right]
+\min_{\theta, \phi, a} \;\mathbb{E}\!\left[\mathcal{L}_{\text{task}} + \lambda_J J + \lambda_L L + \lambda_M M + \lambda_\chi \chi\right]
 $$
 
 where:

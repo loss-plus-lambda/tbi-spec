@@ -119,15 +119,8 @@ The Lagrangian relaxation is then applied to the **continuous** policy parameter
 
 $$
 \min_{\theta, \phi, a}
-\;
-\mathbb{E}
-\left[
-\mathcal{L}_{\text{task}}
-+ \lambda_J J
-+ \lambda_L L
-+ \lambda_M M
-+ \lambda_\chi \chi
-\right]
+\;\mathbb{E}
+\left[\mathcal{L}_{\text{task}} + \lambda_J J + \lambda_L L + \lambda_M M + \lambda_\chi \chi\right]
 $$
 
 This relaxation makes explicit that TBI is a **multi-objective optimization problem** over quality and deployment cost. The Lagrange multipliers $\{\lambda_k\}$ are adapted by a derivative-damped dual ascent update with hysteresis to prevent oscillation under delayed cost feedback (see §7).
@@ -182,8 +175,7 @@ $$
 \sum_{i=1}^{N}
 \left\|
 \mathbf{D}^{-1/2}\!\left(\hat{\mathbf{c}}_\psi(z_i) - c_i\right)
-\right\|_2^2
-+ \eta \|\psi\|_2^2
+\right\|_2^2 + \eta \|\psi\|_2^2
 $$
 
 where $\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$ is the diagonal matrix of empirical per-component variances measured on $\mathcal{D}_{\text{trace}}$. Without this normalization the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) dominates the MSE objective and the surrogate fails to learn the other components.
@@ -193,11 +185,7 @@ The binary throttling indicator $\chi \in \{0,1\}$ is trained with a separate **
 $$
 \min_{\psi_\chi}
 \sum_i
-\left[
--\chi_i \log \hat{\chi}_{\psi_\chi}(z_i)
-- (1-\chi_i)\log(1 - \hat{\chi}_{\psi_\chi}(z_i))
-\right]
-+ \eta_\chi \|\psi_\chi\|_2^2
+\left[-\chi_i \log \hat{\chi}_{\psi_\chi}(z_i) - (1-\chi_i)\log(1 - \hat{\chi}_{\psi_\chi}(z_i))\right] + \eta_\chi \|\psi_\chi\|_2^2
 $$
 
 The surrogate uses separate prediction heads: normalized MSE for continuous costs $(J, L, M)$ and cross-entropy for the binary safety indicator $\chi$.
@@ -208,12 +196,8 @@ The deployment-aware objective then becomes:
 
 $$
 \min_{\theta, \phi, a}
-\;
-\mathbb{E}
-\left[
-\mathcal{L}_{\text{task}}
-+ \lambda^\top \hat{\mathbf{c}}_\psi(\Phi(x, \pi_\phi(x, s), s, a))
-\right]
+\;\mathbb{E}
+\left[\mathcal{L}_{\text{task}} + \lambda^\top \hat{\mathbf{c}}_\psi(\Phi(x, \pi_\phi(x, s), s, a))\right]
 $$
 
 This is the central mathematical move in TBI: the system optimizes against a measured or learned proxy of deployment cost.
@@ -278,7 +262,7 @@ One reason the literal thermodynamic picture is misleading is that the relevant 
 TBI enforces a **three-tier control separation** aligned with the Dual-Window Telemetry Architecture (Appendix B):
 
 1. **Fast serving loop** (sub-ms): routing decisions, gate evaluation, KV cache lookups — driven by fast-window telemetry ($\leq 1$ ms FLOP counters, timestamps, bandwidth)
-2. **Slow control loop** (5–50 ms): DVFS threshold updates, batch-size cap tuning, safety flag propagation — driven by slow-window telemetry ($\geq 5$–$50$ ms thermal, board power, clock state)
+2. **Slow control loop** ($5\text{–}50$ ms): DVFS threshold updates, batch-size cap tuning, safety flag propagation — driven by slow-window telemetry ($\geq 5\text{–}50$ ms thermal, board power, clock state)
 3. **Offline optimization loop** (hours to weeks): surrogate retraining, Lagrange multiplier updates, policy gradient optimization, model compression and distillation — decoupled from real-time inference entirely; outputs enter production only through the evaluation and promotion pipeline (Appendix E, §7 here)
 
 The fast and slow loops map directly to the two telemetry windows. The offline loop is not a real-time control loop — it is a batch optimization pipeline with weekly or longer cadence.
@@ -342,7 +326,7 @@ Surrogates trained on one workload may misestimate cost on another. Cost-model v
 
 ### 8.2 Sensor Noise and Aggregation
 
-Power and temperature sensors report averaged values at millisecond or multi-millisecond resolution, not true per-request measurements. The mitigation is twofold: (1) the **dual-window telemetry architecture** in Appendix B enforces a hard separation between fast signals (FLOP counters, $\leq 1$ ms) and slow signals (thermal, $\geq 5$–$50$ ms), preventing conflation across time scales; (2) the **FLOP-count analytical proxy** $\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,k) + \beta_k$ replaces raw power integration as the primary energy estimator, eliminating the dependence on noisy sensor readouts for per-request cost attribution.
+Power and temperature sensors report averaged values at millisecond or multi-millisecond resolution, not true per-request measurements. The mitigation is twofold: (1) the **dual-window telemetry architecture** in Appendix B enforces a hard separation between fast signals (FLOP counters, $\leq 1$ ms) and slow signals (thermal, $\geq 5\text{–}50$ ms), preventing conflation across time scales; (2) the **FLOP-count analytical proxy** $\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,k) + \beta_k$ replaces raw power integration as the primary energy estimator, eliminating the dependence on noisy sensor readouts for per-request cost attribution.
 
 ### 8.3 Coupling to Queueing and Batching
 

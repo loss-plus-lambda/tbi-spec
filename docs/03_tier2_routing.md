@@ -118,10 +118,7 @@ A route-aware objective can be written as:
 $$
 \min_{\phi}
 \;\mathbb{E}
-\left[
-\mathcal{L}_{\text{task}}(f_{\theta, \pi_\phi(x, s)}(x), y)
-+ \lambda^\top \hat{\mathbf{c}}_\psi(x, \pi_\phi(x, s), s)
-\right]
+\left[\mathcal{L}_{\text{task}}(f_{\theta, \pi_\phi(x, s)}(x), y) + \lambda^\top \hat{\mathbf{c}}_\psi(x, \pi_\phi(x, s), s)\right]
 $$
 
 In practice, this is often implemented through:
@@ -225,13 +222,13 @@ If telemetry signals are noisy or lagged, thresholds may overreact or underreact
 
 ### 8.4 Gate Cost Creep
 
-A routing stack that grows too large defeats its own purpose. The gate's thermodynamic justification requires two independent constraints to hold simultaneously. Let $C_g$ denote the total gate cost in combined FLOPs and memory bandwidth, $C_f$ the fast-path cost, $C_s$ the slow-path cost, and $p^*$ the expected escalation rate on the target workload:
+A routing stack that grows too large defeats its own purpose. The gate's thermodynamic justification requires two independent constraints to hold simultaneously. Let $C_g$ denote the total gate cost in combined FLOPs and memory bandwidth, $C_f$ the fast-path cost, $C_s$ the slow-path cost, and $p^{\ast}$ the expected escalation rate on the target workload:
 
 $$C_g \leq \epsilon_f \cdot C_f, \qquad \epsilon_f \in [0.01,\; 0.05]$$
 
 $$C_g \leq \epsilon_n \cdot (1 - p^*)(C_s - C_f), \qquad \epsilon_n \leq 0.10$$
 
-The first constraint limits the gate to at most 1–5% of the fast path's own FLOP and bandwidth budget, preventing it from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Both constraints must hold at the observed $p^*$, not just at the median. $p^*$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. A gate that violates either constraint at the current $p^*$ — whether due to initial design or subsequent workload drift — must trigger a mandatory routing-policy review within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance at the current $p^*$.
+The first constraint limits the gate to at most 1–5% of the fast path's own FLOP and bandwidth budget, preventing it from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Both constraints must hold at the observed $p^{\ast}$, not just at the median. $p^{\ast}$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. A gate that violates either constraint at the current $p^{\ast}$ — whether due to initial design or subsequent workload drift — must trigger a mandatory routing-policy review within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance at the current $p^{\ast}$.
 
 ---
 

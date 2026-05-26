@@ -208,7 +208,13 @@ This is the central mathematical move in TBI: the system optimizes against a mea
 
 ### 3.5 Surrogate Validity Under Policy Updates
 
-The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, the distribution of feature vectors $z_i$ shifts and the surrogate may become miscalibrated on the new request distribution.
+Surrogate retraining uses the following notation:
+
+- $\hat{\mathbf{c}}_\psi$: surrogate cost model
+- $\pi_\phi^{\text{old}}$: prior routing policy
+- $\pi_\phi^{\text{new}}$: updated routing policy
+
+Traces are collected under $\pi_\phi^{\text{old}}$. After updating to $\pi_\phi^{\text{new}}$, the distribution of feature vectors $z_i$ shifts and the surrogate may become miscalibrated on the new request distribution.
 
 **Retraining Trigger.** Surrogate retraining is triggered when routing distribution shift exceeds a calibrated KL threshold:
 

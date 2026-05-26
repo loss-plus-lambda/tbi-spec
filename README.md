@@ -382,9 +382,21 @@ Both gains are bounded:
 
 $$\alpha_\lambda \leq \frac{1}{L_\psi \cdot W}, \qquad \mu \leq \frac{\alpha_\lambda \cdot \Delta t}{2}$$
 
-The bound on $\alpha_\lambda$ follows from the Lipschitz condition on the surrogate; $L_\psi$ is estimated empirically as the maximum observed $\|\hat{\mathbf{c}}_\psi(z) - \hat{\mathbf{c}}_\psi(z')\| / \|z - z'\|$ over a held-out calibration set, or enforced by spectral normalization of the surrogate network layers. The bound on $\mu$ prevents the discrete derivative term from reversing the proportional step direction under sustained constraint violation — exceeding it destabilizes the multiplier in the same way as an oversized $\alpha_\lambda$. A hysteresis band of width $\pm\eta_k$ around each constraint boundary $B_k$ prevents rapid multiplier cycling: the multiplier updates only when $|e_k^{(t)}| > \eta_k$.
+The bound on $\alpha_\lambda$ follows from the Lipschitz condition on the surrogate. The Lipschitz constant is estimated empirically on a held-out calibration set as:
 
-**Importance-Weighted Surrogate Retraining.** The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, covariate shift invalidates the surrogate on the new request distribution. Surrogate retraining is triggered when routing distribution shift exceeds a calibrated KL threshold:
+$$
+L_\psi = \max_{z, z'} \frac{\|\hat{\mathbf{c}}_\psi(z) - \hat{\mathbf{c}}_\psi(z')\|}{\|z - z'\|}
+$$
+
+Alternatively, $L_\psi$ may be controlled by spectral normalization of the surrogate network layers. The bound on $\mu$ prevents the discrete derivative term from reversing the proportional step direction under sustained constraint violation — exceeding it destabilizes the multiplier in the same way as an oversized $\alpha_\lambda$. A hysteresis band of width $\pm\eta_k$ around each constraint boundary $B_k$ prevents rapid multiplier cycling: the multiplier updates only when $\lvert e_k^{(t)} \rvert > \eta_k$.
+
+**Importance-Weighted Surrogate Retraining.** Surrogate retraining uses the following notation:
+
+- $\hat{\mathbf{c}}_\psi$: surrogate cost model
+- $\pi_\phi^{\text{old}}$: prior routing policy
+- $\pi_\phi^{\text{new}}$: updated routing policy
+
+Traces are collected under $\pi_\phi^{\text{old}}$. After updating to $\pi_\phi^{\text{new}}$, covariate shift can invalidate the surrogate on the new request distribution. Surrogate retraining is triggered when routing distribution shift exceeds a calibrated KL threshold:
 
 $$\mathbb{E}_{z \sim \mathcal{D}_{\text{trace}}}\!\left[\mathrm{KL}\!\left(\pi_\phi^{\text{new}}(\cdot \mid z) \;\Big\|\; \pi_\phi^{\text{old}}(\cdot \mid z)\right)\right] > \delta_{\mathrm{KL}}$$
 

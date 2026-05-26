@@ -410,7 +410,11 @@ where
 
 $$\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$$
 
-is the empirical per-component variance matrix of the cost vector in the trace dataset. Variance normalization prevents the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) from dominating the regression objective. The weight clip at $[0.1, 10]$ bounds IS variance — unclipped density ratios from a neural discriminator can have unbounded variance when old and new routing distributions have near-disjoint support. The binary throttling indicator $\chi$ is trained with a separate cross-entropy head; the total surrogate loss sums the normalized-MSE regression heads $(J, L, M)$ and the cross-entropy head $(\chi)$.
+is the empirical per-component variance matrix of the cost vector in the trace dataset. Variance normalization prevents the cost component with the largest absolute scale from dominating the regression objective. Typical orders of magnitude are:
+
+$$M = \mathcal{O}(10^9)\;\text{bytes}, \qquad J = \mathcal{O}(10^{-3})\;\text{millijoules}$$
+
+The weight clip at $[0.1, 10]$ bounds IS variance — unclipped density ratios from a neural discriminator can have unbounded variance when old and new routing distributions have near-disjoint support. The binary throttling indicator $\chi$ is trained with a separate cross-entropy head; the total surrogate loss sums the normalized-MSE regression heads $(J, L, M)$ and the cross-entropy head $(\chi)$.
 
 **Unit Normalization Convention.** All cost terms entering the Lagrangian are normalized: $J$ in millijoules-per-token, $L$ in milliseconds, $M$ in gigabytes-per-request. Lagrange multipliers $\lambda_k$ carry the reciprocal units, ensuring the step-size bound $\alpha_\lambda \leq 1/(L_\psi W)$ is evaluated in consistent dimensions across all constraint types.
 

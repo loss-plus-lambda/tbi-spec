@@ -182,7 +182,9 @@ where
 
 $$\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$$
 
-is the diagonal matrix of empirical per-component variances measured on $\mathcal{D}_{\text{trace}}$. Without this normalization the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) dominates the MSE objective and the surrogate fails to learn the other components.
+is the diagonal matrix of empirical per-component variances measured on $\mathcal{D}_{\text{trace}}$. Without this normalization the cost component with the largest absolute scale dominates the MSE objective and the surrogate fails to learn the other components. Typical orders of magnitude are:
+
+$$M = \mathcal{O}(10^9)\;\text{bytes}, \qquad J = \mathcal{O}(10^{-3})\;\text{millijoules}$$
 
 The binary throttling indicator $\chi \in \{0,1\}$ is trained with a separate **cross-entropy head**:
 

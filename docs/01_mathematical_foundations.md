@@ -107,9 +107,15 @@ $$
 
 where $B_J$, $B_L$, and $B_M$ are operator-defined budgets and $\delta$ is an acceptable thermal-risk threshold.
 
-### 2.3 Lagrangian Relaxation
+### 2.3 Lagrangian Relaxation and Discrete Routing
 
-In practice, a relaxed objective is often easier to optimize:
+Route selection, early-exit depth, expert assignment, and quantization level are inherently discrete decisions. The standard Lagrangian relaxation of a mixed-integer program does not generally yield integer-feasible solutions; the duality gap can be nonzero and problem-dependent. TBI therefore adopts a **stochastic policy formulation** for the routing layer:
+
+$$k \sim \pi_\phi(x, s) = \text{Gumbel-Softmax}\!\left(g_\phi(x, s),\; \tau_{\text{temp}}\right)$$
+
+where $g_\phi(x, s)$ are the gate logits and $\tau_{\text{temp}}$ is a temperature parameter annealed during offline policy optimization. The Gumbel-Softmax reparameterization provides differentiable surrogate gradients through the discrete routing decision during training. At deployment, the policy is evaluated in hard mode (argmax). For multi-step escalation trees where Gumbel-Softmax is structurally inapplicable, the REINFORCE estimator with a learned variance-reducing baseline is used instead.
+
+The Lagrangian relaxation is then applied to the **continuous** policy parameters and surrogate cost terms:
 
 $$
 \min_{\theta, \phi, a}
@@ -124,7 +130,7 @@ $$
 \right]
 $$
 
-This relaxation makes explicit that TBI is a **multi-objective optimization problem** over quality and deployment cost.
+This relaxation makes explicit that TBI is a **multi-objective optimization problem** over quality and deployment cost. The Lagrange multipliers $\{\lambda_k\}$ are adapted by a derivative-damped dual ascent update with hysteresis to prevent oscillation under delayed cost feedback (see §7).
 
 ---
 
@@ -197,6 +203,18 @@ $$
 $$
 
 This is the central mathematical move in TBI: the system optimizes against a measured or learned proxy of deployment cost.
+
+### 3.5 Surrogate Validity Under Policy Updates
+
+The surrogate $\hat{\mathbf{c}}_\psi$ is trained on traces collected under a prior policy $\pi_\phi^{\text{old}}$. When the routing policy is updated to $\pi_\phi^{\text{new}}$, the distribution of feature vectors $z_i$ shifts and the surrogate may become miscalibrated on the new request distribution. Surrogate retraining is therefore triggered whenever policy drift exceeds a threshold:
+
+$$\|\phi^{\text{new}} - \phi^{\text{old}}\|_2 > \delta_\phi$$
+
+Retraining uses importance-weighted empirical risk minimization:
+
+$$\min_\psi \sum_i w_i \left\|\hat{\mathbf{c}}_\psi(z_i) - c_i\right\|_2^2 + \eta\|\psi\|_2^2, \qquad w_i = \frac{p_{\text{new}}(z_i)}{p_{\text{old}}(z_i)}$$
+
+where the density ratio $w_i$ is estimated from a lightweight discriminator trained on the old and new trace distributions. This correction prevents the surrogate from silently degrading the routing policy after each optimization cycle.
 
 ---
 
@@ -278,10 +296,19 @@ The TBI optimization loop proceeds as follows.
 
 1. collect traces from deployment
 2. estimate route- and workload-specific costs
-3. fit or update surrogate models
-4. generate candidate routing or compression policies
-5. validate candidates on held-out tasks and held-out traces
-6. promote only if they improve the operator’s objective
+3. fit or update surrogate models; if policy drift exceeds $\|\phi^{\text{new}} - \phi^{\text{old}}\|_2 > \delta_\phi$, retrain with importance weighting (§3.5)
+4. update Lagrange multipliers using derivative-damped dual ascent with hysteresis
+5. generate candidate routing or compression policies
+6. validate candidates on held-out tasks and held-out traces
+7. promote only if they improve the operator's objective
+
+For step 4, the update rule is:
+
+$$
+\lambda_k^{(t+1)} = \max\!\left(0,\; \lambda_k^{(t)} + \alpha_\lambda \cdot e_k^{(t)} + \mu \cdot \frac{e_k^{(t)} - e_k^{(t-1)}}{\Delta t} \right)
+$$
+
+where $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$ is the exponentially-weighted constraint violation over a window of $W$ requests, $\alpha_\lambda \leq 1 / (L_\psi \cdot W)$ for convergence, and the hysteresis band $\pm\eta_k$ prevents updates when $|e_k^{(t)}| \leq \eta_k$.
 
 This makes TBI a closed-loop program without requiring unsafe live mutation.
 
@@ -295,7 +322,7 @@ Surrogates trained on one workload may misestimate cost on another. Cost-model v
 
 ### 8.2 Sensor Noise and Aggregation
 
-Power and temperature sensors often report averaged values, not true per-request measurements. Overconfident attribution will produce misleading gradients or rankings.
+Power and temperature sensors report averaged values at millisecond or multi-millisecond resolution, not true per-request measurements. The mitigation is twofold: (1) the **dual-window telemetry architecture** in Appendix B enforces a hard separation between fast signals (FLOP counters, $\leq 1$ ms) and slow signals (thermal, $\geq 5$–$50$ ms), preventing conflation across time scales; (2) the **FLOP-count analytical proxy** $\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,k) + \beta_k$ replaces raw power integration as the primary energy estimator, eliminating the dependence on noisy sensor readouts for per-request cost attribution.
 
 ### 8.3 Coupling to Queueing and Batching
 

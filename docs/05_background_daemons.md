@@ -147,9 +147,11 @@ This is a valuable part of TBI and one of the safest forms of continuous optimiz
 
 ---
 
-## 5. Promotion Criteria
+## 5. Promotion Criteria and Scheduling Constraints
 
-A candidate should be promoted only if it satisfies explicit gates. A simple example is:
+A candidate should be promoted only if it satisfies all explicit gates simultaneously.
+
+**Quality, latency, and safety gates:**
 
 $$
 \Delta Q \leq \epsilon_Q,
@@ -164,11 +166,34 @@ $$
 where:
 
 - $\Delta Q$ is quality regression relative to baseline
-- $\Delta J$ is change in energy cost
+- $\Delta J$ is change in serving energy cost
 - $\Delta L_{95}$ is change in p95 latency
 - $\Delta \chi$ is change in safety or throttling violations
 
-This makes the update policy measurable and auditable.
+**Net-negative Joule amortization gate.** A candidate that passes the above gates but whose training cost exceeds its projected serving savings is a net energy consumer and must not be promoted:
+
+$$\frac{E_{\text{daemon}}}{|\Delta J_{\text{serving}}| \cdot R_{\text{projected}}} \leq H_{\text{amortize}}$$
+
+where $E_{\text{daemon}}$ is the measured energy cost of the daemon run, $|\Delta J_{\text{serving}}|$ is the measured per-request energy improvement, $R_{\text{projected}}$ is the expected request count over the model's remaining deployment window, and $H_{\text{amortize}}$ is a configurable maximum amortization horizon (default: 30 days). All five gates must pass before promotion proceeds.
+
+**Diminishing-returns stopping criterion.** Iterative daemon passes exhibit concave marginal returns: successive compression or pruning rounds recover less redundancy at constant compute cost. Daemon cycles terminate automatically when marginal per-request energy improvement falls below an operator-defined threshold $\kappa$:
+
+$$\frac{\partial\,|\Delta J_{\text{saving}}|}{\partial\,n_{\text{rounds}}} \leq \kappa$$
+
+Running daemon iterations past this boundary inverts the energy ROI and is treated as a configuration defect.
+
+**Grid-Aware Efficiency Policy.** Energy accounting must not conflate Joule consumption with carbon impact. Off-peak scheduling that minimizes GPU idle time can worsen grid carbon intensity when those hours are served by baseload carbon generation. TBI therefore mandates grid-aware scheduling for daemon windows:
+
+- Daemon execution is preferred when marginal grid carbon intensity $\gamma(t)$ is at or below the rolling 24-hour median $\bar{\gamma}_{24h}$, sourced from a real-time forecast (e.g., WattTime or Electricity Maps).
+- The effective scheduling metric is the carbon-adjusted cost $E_{\text{carbon}} = E_{\text{daemon}} \cdot \gamma(t)$, not raw Joules alone.
+
+**Thermal Recovery Gap.** Daemon runs at full GPU utilization delay thermal recovery of the package. A mandatory cooldown gap $\Delta t_{\text{cool}}$ is enforced between the end of any daemon window and the start of the subsequent peak traffic window:
+
+$$\Delta t_{\text{cool}} \geq R_\theta C_\theta \ln\!\left(\frac{\tau_{\text{daemon}} - \tau_{\text{ambient}}}{\tau_{\text{target}} - \tau_{\text{ambient}}}\right)$$
+
+where $R_\theta$ is the package thermal resistance, $C_\theta$ is thermal capacitance, $\tau_{\text{daemon}}$ is the measured junction temperature at daemon completion, and $\tau_{\text{target}}$ is the peak-traffic thermal headroom target. Where hardware thermal models are unavailable, this window defaults to empirical measurement across at least 20 run-cooldown cycles on the target hardware class.
+
+This makes the update policy measurable, auditable, globally energy-justified, and carbon-aware.
 
 ---
 

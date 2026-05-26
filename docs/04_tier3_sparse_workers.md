@@ -77,9 +77,13 @@ Therefore:
 
 ### 2.2 Batching Interaction
 
-In batched serving, different sequences may satisfy exit criteria at different depths. This complicates scheduling and can reduce effective savings.
+In batched serving, different sequences may satisfy exit criteria at different depths. This complicates scheduling and can reduce effective savings: in continuous batching, sequences that exit early create fragmented KV cache occupancy, and remaining sequences compete for the same memory with partially vacated but not yet deallocated slots, reducing effective GPU utilization across the batch.
 
-A strong TBI implementation should report not only single-request savings, but also batch-level realized savings under realistic traffic.
+A strong TBI implementation must therefore report a **batch efficiency correction factor** $\rho_{\text{batch}} \in (0, 1]$, defined as the ratio of realized batch-level energy savings to the theoretical per-request savings:
+
+$$\Delta J_{\text{realized}} = \rho_{\text{batch}} \cdot \Delta J_{\text{theoretical}}$$
+
+Evaluation tables must report $\rho_{\text{batch}}$ at the representative batch sizes used in production. Single-request theoretical savings without this correction factor are insufficient for publication-grade claims.
 
 ### 2.3 Calibration Requirement
 

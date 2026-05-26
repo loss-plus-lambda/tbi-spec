@@ -56,36 +56,33 @@ These metrics are valuable for control and diagnosis, but often too slow or nois
 
 ---
 
-## 3. Time-Scale Separation
+## 3. Time-Scale Separation and Dual-Window Architecture
 
-A major source of confusion in hardware-aware ML is the mixing of incompatible time scales.
+Mixing incompatible signal time scales is the primary source of attribution error in hardware-aware ML. TBI resolves this by enforcing a **dual-window telemetry architecture** with two strictly separated polling loops.
 
-### 3.1 Fast Signals
+### 3.1 Fast Window ($\leq 1$ ms)
 
-Some counters can be gathered at kernel or micro-batch granularity:
+Gathered at kernel or micro-batch granularity with zero sensor lag. These signals form the **primary optimization substrate**:
 
 - kernel duration
-- FLOP estimates
-- profiler counters
+- FLOP counts (from hardware performance counters or model metadata)
 - route-level request timestamps
+- achieved memory bandwidth
 
-### 3.2 Medium Signals
+### 3.2 Slow Window ($\geq 5$–$50$ ms)
 
-Many vendor telemetry APIs expose values at millisecond or multi-millisecond resolution:
+Many vendor telemetry APIs expose values at millisecond or multi-millisecond resolution. These signals are consumed **exclusively as control and safety inputs** — they must not be used as per-request cost targets:
 
 - board power
 - average clocks
 - memory utilization snapshots
-
-### 3.3 Slow Signals
-
-Thermal state usually evolves more slowly and depends on recent history:
-
 - junction temperature
 - thermal headroom
-- throttling due to sustained heating
+- throttling indicators
 
-TBI should exploit this separation rather than pretending it does not exist.
+### 3.3 Architectural Requirement
+
+Conflating the two windows — for example, attributing a vendor-reported 10 ms power average to a 3 ms token generation event — produces systematic attribution errors that corrupt both surrogate cost models and routing policies. The two-window separation is a **hard architectural requirement**, not a recommendation. Any implementation that polls slow-window signals on the fast-window path is non-conformant.
 
 ---
 
@@ -172,15 +169,23 @@ Instead, TBI should use:
 - periodic profiling runs for representative slices
 - counterfactual replay on held-out traces
 
-### 6.3 Windowed Energy Estimation
+### 6.3 Energy Estimation: Analytical Proxy (Primary)
 
-When power is available only as a time series, request energy can be approximated by integration over windows:
+The preferred primary energy estimator is the **FLOP-count analytical proxy**, which is deterministic, zero-latency, and immune to sensor jitter or idle-power baseline drift:
+
+$$\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,\, k) + \beta_k$$
+
+where $\alpha_k$ is a per-route joules-per-FLOP coefficient and $\beta_k$ is a per-route static memory-access cost term, both calibrated from periodic offline profiling runs at representative batch shapes. This proxy is the default estimator for routing and surrogate training.
+
+### 6.4 Windowed Power Integration (Fallback)
+
+When a FLOP proxy cannot be derived — for example, on closed-source model paths or novel architectures — power integration over windows provides a lower-fidelity fallback:
 
 $$
 J_{\text{window}} \approx \int_{t_0}^{t_1} \left(P(t) - P_{\text{idle}}\right) dt
 $$
 
-Allocation from windows to routes should then be done statistically, not presented as exact ground truth.
+Three limitations must be acknowledged when using this fallback: (1) $P_{\text{idle}}$ is not a stable constant at ms resolution; (2) the integration window must align with the slow-window cadence, not the fast-window cadence; (3) allocation from windows to routes must be done statistically over many samples, never presented as request-level ground truth.
 
 ---
 
@@ -200,6 +205,16 @@ The serving stack may adjust:
 
 These adjustments should be conservative and reversible.
 
+**Sensor-Delay Compensation.** The routing gate consumes $\vec{T}(t - \Delta t_{\text{sensor}})$, a delayed observation with $\Delta t_{\text{sensor}} \in [1, 10]$ ms on commodity accelerators. Threshold updates must be passed through a low-pass filter with cutoff frequency:
+
+$$\omega_c \leq \frac{1}{2\,\Delta t_{\text{sensor}}}$$
+
+The controller gain $K$ for any DVFS adjustment loop is bounded by the Nyquist stability condition applied to the delay-augmented plant:
+
+$$K \leq \frac{\pi}{2\,\omega_c\,\Delta t_{\text{sensor}}}$$
+
+Gain selections exceeding this bound risk sawtooth oscillation in the DVFS state across the load window and must not be deployed.
+
 ### 7.2 Slow Offline Optimization
 
 Trace data supports:
@@ -211,16 +226,27 @@ Trace data supports:
 
 ---
 
-## 8. Measurement Claims That Should Be Avoided
+## 8. Measurement Claims: Prohibited and Specified
 
-To keep the whitepaper scientifically tight, the following claims should be avoided unless backed by hardware-specific evidence:
+### 8.1 Claims That Remain Prohibited
+
+The following claims must not be made without hardware-specific evidence:
 
 - a universal sub-500 microsecond telemetry loop on commodity accelerators
 - exact per-request thermal attribution using vendor APIs alone
 - the claim that vendor-reported power draw is synchronized tightly enough for token-level ground truth
 - the claim that the telemetry stack is guaranteed non-interfering at all cadences
 
-A more defensible statement is that measurement resolution and overhead depend on the hardware and instrumentation level.
+### 8.2 Claims That Are Now Formally Specified
+
+The following are defined as hard architectural requirements and may be positively asserted when the implementation conforms:
+
+- the dual-window separation between fast ($\leq 1$ ms) and slow ($\geq 5$–$50$ ms) telemetry paths
+- the FLOP-count analytical proxy $\hat{J}_k = \alpha_k \cdot \text{FLOP}(x,k) + \beta_k$ as the primary per-route energy estimator
+- the low-pass filter bound $\omega_c \leq 1 / (2\,\Delta t_{\text{sensor}})$ on DVFS controller updates
+- the Nyquist-derived controller gain bound $K \leq \pi / (2\,\omega_c\,\Delta t_{\text{sensor}})$
+
+A conformant TBI telemetry implementation satisfies all four specified requirements. Measurement resolution and overhead beyond these bounds remain hardware-tier dependent.
 
 ---
 

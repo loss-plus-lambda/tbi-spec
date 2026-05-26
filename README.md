@@ -47,7 +47,7 @@ The TBI proposal has two parts. The first is a **near-term software path** that 
   - [Stage 5: Custom Hardware Research](#stage-5-custom-hardware-research)
 - [9. Documentation Guide](#9-documentation-guide)
 - [10. Selected Prior Work](#10-selected-prior-work)
-- [11. Conclusion](#11-conclusion)
+- [11. Closing Position](#11-closing-position)
 - [License](#license)
 
 ---
@@ -294,9 +294,9 @@ Representative examples include work by Kaplan et al., Hoffmann et al., Shazeer 
 
 ---
 
-## 11. Conclusion
+## 11. Closing Position
 
-TBI should be evaluated as a practical research agenda for **quality under physical constraint**. Its strongest near-term form is not literal thermodynamic backpropagation, but a disciplined closed loop connecting telemetry, routing, compression, and periodic retraining. The decisive question is empirical: can this loop move the Pareto frontier of quality, cost, and reliability on real workloads?
+TBI is proposed as a research agenda for **quality under physical constraint**. Its strongest near-term form is not literal thermodynamic backpropagation, but a disciplined closed loop connecting telemetry, routing, compression, and periodic retraining. The central hypothesis is empirical: can this loop move the Pareto frontier of quality, cost, and reliability on real workloads?
 
 ---
 

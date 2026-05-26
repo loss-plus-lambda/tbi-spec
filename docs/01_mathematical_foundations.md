@@ -8,7 +8,7 @@
 
 ## Overview
 
-This appendix formalizes Thermodynamically Bounded Intelligence as a problem of **constrained adaptive inference** and **surrogate-guided optimization**. The goal is not to claim that thermal sensors, board power, or memory controller behavior are exactly differentiable with respect to arbitrary model weights during standard training. The goal is narrower and more defensible: deployment cost can be modeled, predicted, and incorporated into optimization over the controllable decisions of a serving system.
+This appendix formalizes Thermodynamically Bounded Intelligence as a problem of **constrained adaptive inference** and **surrogate-guided optimization**. The goal is not to claim that thermal sensors, board power, or memory controller behavior are exactly differentiable with respect to arbitrary model weights during standard training. The goal is narrower: deployment cost can be modeled, predicted, and incorporated into optimization over the controllable decisions of a serving system.
 
 Those controllable decisions include route choice, early-exit thresholds, expert selection, quantization level, architecture choice, and model compression level. In this setting, hardware cost is not an afterthought; it is part of the objective.
 
@@ -340,7 +340,7 @@ Thermal headroom is highly useful for control and safety, but weak as a precise 
 
 ## 9. Testable Hypotheses
 
-A publication-grade TBI program should make falsifiable claims.
+The TBI program defines falsifiable hypotheses:
 
 1. **Routing hypothesis:** A calibrated multi-path policy can reduce expected serving cost at fixed quality on skewed workloads.
 2. **Compression hypothesis:** Trace-guided distillation or pruning can outperform static compression chosen without deployment traces.

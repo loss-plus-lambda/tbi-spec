@@ -30,7 +30,7 @@ A model may expose one or more exit checkpoints. At checkpoint $n$, a lightweigh
 Let $h_n$ be the hidden state at checkpoint $n$ and let $q_n(h_n)$ be an exit head. A generic early-exit rule is:
 
 $$
-n^{\ast}(x) = \min\{ n \in \mathcal{G} \mid \kappa_n(x) \geq \tau_n \}
+n^{\ast}(x) = \min\left\{\, n \in \mathcal{G} \;\middle|\; \kappa_n(x) \geq \tau_n \,\right\}
 $$
 
 where:

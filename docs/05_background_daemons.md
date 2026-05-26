@@ -8,9 +8,9 @@
 
 ## Overview
 
-This appendix revises the original “background daemons” concept into a safer and more scientifically credible **background optimization and maintenance pipeline**. The key change is operational: production systems should not be described as freely self-editing organisms that mutate their active weights in place. In practice, model changes that affect correctness belong in an offline or shadow pipeline with evaluation, canaries, rollback, and version control.
+This appendix defines the “background daemons” concept as a safer **background optimization and maintenance pipeline**. The key requirement is operational: production systems do not mutate active weights in place. Model changes that affect correctness belong in an offline or shadow pipeline with evaluation, canaries, rollback, and version control.
 
-This does not weaken the TBI idea. It strengthens it. The core insight remains that deployment traces can guide ongoing optimization. The difference is that the optimization loop is treated as a disciplined engineering pipeline rather than as unconstrained autonomous self-modification.
+The core insight remains that deployment traces guide ongoing optimization. The optimization loop is treated as a disciplined engineering pipeline rather than as unconstrained autonomous self-modification.
 
 ---
 
@@ -107,15 +107,7 @@ Only candidates that survive offline evaluation should be run in shadow or canar
 
 ### 3.1 Pruning and Quantization
 
-Pruning and quantization remain core TBI tools, but the whitepaper should frame them conservatively.
-
-Strong claim:
-
-> Deployment traces can help prioritize which components are worth compressing.
-
-Weak claim that should be avoided:
-
-> The system can safely prune itself online with no external controls.
+Pruning and quantization remain core TBI tools. Deployment traces prioritize which components are worth compressing. Online pruning without external controls is out of scope.
 
 Pruning candidates should therefore be scored using both:
 
@@ -126,11 +118,9 @@ Pruning candidates should therefore be scored using both:
 
 Distillation is one of the strongest tools in the TBI framework. A smaller student can be trained to mimic the heavy path on the workload slices that actually matter in deployment.
 
-Useful TBI question:
+Key hypothesis:
 
 - can trace-targeted distillation outperform generic compression chosen without deployment data?
-
-That is a clear and publishable hypothesis.
 
 ---
 
@@ -205,7 +195,7 @@ This makes the update policy measurable, auditable, globally energy-justified, a
 
 ## 6. Governance and Reproducibility
 
-A publication-grade TBI system should include:
+A TBI system includes:
 
 - model change records
 - route-policy change records
@@ -221,7 +211,7 @@ Without these elements, the “self-optimization” story becomes operationally 
 
 ## 7. What Remains Autonomous
 
-Even with this conservative rewrite, TBI still supports meaningful autonomy.
+TBI supports bounded autonomy.
 
 The system can autonomously:
 
@@ -232,13 +222,13 @@ The system can autonomously:
 - run offline benchmarks
 - recommend promotions
 
-What it should not autonomously do in the strongest sense is alter active production weights without evaluation and deployment safeguards.
+It must not autonomously alter active production weights without evaluation and deployment safeguards.
 
 ---
 
 ## 8. Research Questions
 
-A strong TBI paper should pose concrete questions for the background pipeline.
+The background pipeline is evaluated with concrete questions:
 
 1. Does trace-guided compression outperform static compression?
 2. Which workload slices benefit most from route-specific distillation?
@@ -252,4 +242,4 @@ These are precise, falsifiable questions.
 
 ## 9. Summary
 
-The background pipeline is where TBI becomes a closed-loop engineering discipline. Its strongest form is not “the model edits itself while serving users.” Its strongest form is a continuous, trace-driven optimization process with explicit evaluation gates and safe rollout. That version is both publishable and operationally credible.
+The background pipeline is where TBI becomes a closed-loop engineering discipline. It is a continuous, trace-driven optimization process with explicit evaluation gates and safe rollout, rather than in-place live model mutation.

@@ -8,7 +8,7 @@
 
 ## Overview
 
-This appendix defines the telemetry layer for TBI. Its purpose is not merely to collect numbers, but to support a defensible measurement model for deployment-aware optimization. The most important scientific adjustment in this whitepaper is that telemetry is treated according to its actual limitations.
+This appendix defines the telemetry layer for TBI. Its purpose is not merely to collect numbers, but to support a measurement model for deployment-aware optimization. Telemetry is treated according to its actual limitations.
 
 On commodity accelerators, telemetry is often coarse, averaged, vendor-specific, and partially asynchronous with request execution. As a result, not every deployment metric is equally suitable for fine-grained optimization. TBI therefore prioritizes **energy, latency, throughput, memory pressure, and throttling events** as primary serving metrics, while treating **temperature and clock state** as slower control and safety signals.
 

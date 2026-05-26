@@ -16,7 +16,7 @@ Thermodynamically Bounded Intelligence (TBI) frames this as a systems-design pro
 
 Large-scale machine learning systems are increasingly constrained not only by data and compute availability, but by deployment-time physical limits: energy draw, cooling capacity, memory bandwidth, latency targets, and thermal safety margins. Standard training objectives optimize task quality directly, while these deployment costs are usually handled later through engineering heuristics such as quantization, pruning, distillation, batching, and serving-time routing. This separation is practical, but incomplete: it leaves substantial efficiency gains unavailable to objectives that never observe deployment costs.
 
-This whitepaper presents **Thermodynamically Bounded Intelligence (TBI)** as a research program for **energy-constrained adaptive inference**. TBI does not assume that silicon temperature or power draw are exactly differentiable with respect to model weights during ordinary training. Instead, it proposes a more defensible approach: deployment telemetry is used to build surrogate cost models and control policies that influence routing, conditional depth, expert selection, compression, and periodic retraining. In this formulation, hardware cost becomes a first-class systems objective without overclaiming exact end-to-end thermodynamic backpropagation.
+This whitepaper presents **Thermodynamically Bounded Intelligence (TBI)** as a research program for **energy-constrained adaptive inference**. TBI does not assume that silicon temperature or power draw are exactly differentiable with respect to model weights during ordinary training. Instead, deployment telemetry is used to build surrogate cost models and control policies that influence routing, conditional depth, expert selection, compression, and periodic retraining. In this formulation, hardware cost becomes a first-class systems objective without overclaiming exact end-to-end thermodynamic backpropagation.
 
 The TBI proposal has two parts. The first is a **near-term software path** that is feasible on present-day accelerators: telemetry-informed routing, early exit, model cascades, expert specialization, distillation, quantization, and offline compression loops. The second is a **long-term hardware research path** involving finer-grained control of memory hierarchy and parameter residency across SRAM, HBM, and non-volatile storage. This whitepaper explicitly distinguishes the two.
 
@@ -240,7 +240,7 @@ The first constraint — gate overhead at most 1–5% of the fast path's own FLO
 
 **Shared Embedding Architecture.** If the gate uses a compact encoder to derive request embeddings, that encoder is promoted to a **shared prefill step** executed once per request — its cost is amortized across downstream routing, retrieval, and KV-cache operations and is not counted within the per-decision gate budget $C_g$. Where the serving stack supports it, encoder weights should be pinned in device memory using platform-specific mechanisms (e.g., NVIDIA MPS memory locking, PyTorch persistent allocation pools) to minimize cold-load latency; on stacks without memory-pinning APIs, the encoder must be excluded from the KV cache eviction pool under a separate allocation policy, and cold-load latency penalties must be measured and reported (if they exceed $0.1 \times C_g$, the shared-prefill amortization benefit must be recalculated). The gate's real-time decision logic — threshold evaluation, FSM lookup, telemetry-aware adjustment — must independently satisfy both constraints above at $\leq 1\text{–}5\%$ of the fast path's combined FLOP and memory-bandwidth budget.
 
-**Coverage Requirement.** Routing gains are highly workload-dependent. Any evaluation must report the risk-coverage curve across the full empirical range of escalation rates $p \in [0, 1]$. The gate must demonstrate positive thermodynamic ROI at the 90th-percentile escalation rate $p_{90}$ observed in production traffic. ROI is necessarily negative at $p \to 1$ (gate executes with zero savings), so the requirement applies up to $p_{90}$, not universally across $p \in [0, 1]$. Efficiency claims reported only at the median escalation rate are insufficient for publication-grade evaluation.
+**Coverage Requirement.** Routing gains are highly workload-dependent. Any evaluation must report the risk-coverage curve across the full empirical range of escalation rates $p \in [0, 1]$. The gate must demonstrate positive thermodynamic ROI at the 90th-percentile escalation rate $p_{90}$ observed in production traffic. ROI is necessarily negative at $p \to 1$ (gate executes with zero savings), so the requirement applies up to $p_{90}$, not universally across $p \in [0, 1]$. Efficiency claims reported only at the median escalation rate are insufficient.
 
 → Full specification: [docs/03_tier2_routing.md](docs/03_tier2_routing.md)
 
@@ -424,7 +424,7 @@ Detailed formalism appears in [docs/01_mathematical_foundations.md](docs/01_math
 
 ## 8. Experimental Program
 
-A credible TBI program should be staged.
+A TBI program should be staged.
 
 ### Stage 1: Instrumentation and Baseline
 

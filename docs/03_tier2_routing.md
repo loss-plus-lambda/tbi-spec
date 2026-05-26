@@ -128,13 +128,13 @@ In practice, this is often implemented through:
 - imitation of the cheapest acceptable path
 - threshold calibration on held-out data
 
-The important scientific point is that the routing decision must be trained and evaluated under **quality and cost together**, not under cost alone.
+Routing decisions must be trained and evaluated under **quality and cost together**, not under cost alone.
 
 ---
 
 ## 5. Suggested Path Hierarchy
 
-A publication-grade TBI design should describe routes in realistic terms.
+The TBI route set should be described in realistic terms.
 
 ### 5.1 Cache or Retrieval Route
 
@@ -186,7 +186,7 @@ Strong routing gains are most plausible on:
 - retrieval-heavy workloads
 - mixed traffic with a large routine component
 
-Claims about very large gains on open-ended general-assistant workloads should be treated as hypotheses requiring evidence, not as assumptions.
+Claims about very large gains on open-ended general-assistant workloads require workload-specific empirical evidence.
 
 ---
 
@@ -234,7 +234,7 @@ The first constraint limits the gate to at most 1–5% of the fast path's own FL
 
 ## 9. Deployment Recommendations
 
-For current production systems, a defensible routing rollout is:
+For current production systems, the routing rollout is:
 
 1. start with two routes: small path and full path
 2. add retrieval or cache answers where precision is high
@@ -242,7 +242,7 @@ For current production systems, a defensible routing rollout is:
 4. evaluate with strict escalation and rollback
 5. introduce domain experts only when the workload justifies them
 
-This staged approach is more credible than assuming a highly complex routing fabric from the start.
+This staged approach is preferred over assuming a highly complex routing fabric from the start.
 
 ---
 

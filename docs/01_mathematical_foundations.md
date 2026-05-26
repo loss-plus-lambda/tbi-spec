@@ -178,7 +178,11 @@ $$
 \right\|_2^2 + \eta \|\psi\|_2^2
 $$
 
-where $\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$ is the diagonal matrix of empirical per-component variances measured on $\mathcal{D}_{\text{trace}}$. Without this normalization the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) dominates the MSE objective and the surrogate fails to learn the other components.
+where
+
+$$\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$$
+
+is the diagonal matrix of empirical per-component variances measured on $\mathcal{D}_{\text{trace}}$. Without this normalization the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) dominates the MSE objective and the surrogate fails to learn the other components.
 
 The binary throttling indicator $\chi \in \{0,1\}$ is trained with a separate **cross-entropy head**:
 
@@ -312,7 +316,12 @@ $$
 \lambda_k^{(t+1)} = \max\!\left(0,\; \lambda_k^{(t)} + \alpha_\lambda \cdot e_k^{(t)} + \mu \cdot \frac{e_k^{(t)} - e_k^{(t-1)}}{\Delta t} \right)
 $$
 
-where $\alpha_\lambda \leq 1 / (L_\psi \cdot W)$ and $\mu \leq \alpha_\lambda \Delta t / 2$. Model weights $\theta$ are **never updated in this loop** — they belong exclusively to the compression and distillation pipeline (Appendix E). Jointly updating $\theta$ and $\phi$ here conflates routing adaptation with model mutation.
+where:
+
+- $\alpha_\lambda \leq 1 / (L_\psi \cdot W)$
+- $\mu \leq \alpha_\lambda \Delta t / 2$
+
+Model weights $\theta$ are **never updated in this loop** — they belong exclusively to the compression and distillation pipeline (Appendix E). Jointly updating $\theta$ and $\phi$ here conflates routing adaptation with model mutation.
 
 This makes TBI a closed-loop program without requiring unsafe live mutation.
 

@@ -372,7 +372,13 @@ $$
 \lambda_k^{(t+1)} = \max\!\left(0,\; \lambda_k^{(t)} + \alpha_\lambda \cdot e_k^{(t)} + \mu \cdot \frac{e_k^{(t)} - e_k^{(t-1)}}{\Delta t} \right)
 $$
 
-where $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$ is the constraint violation measured as an exponentially-weighted moving average over a window of $W$ requests, $\alpha_\lambda$ is the proportional gain, and $\mu$ is the derivative damping coefficient. Both gains are bounded:
+where:
+
+- $e_k^{(t)} = \hat{C}_k^{(t)} - B_k$ is the constraint violation, measured as an exponentially-weighted moving average over a window of $W$ requests.
+- $\alpha_\lambda$ is the proportional gain.
+- $\mu$ is the derivative damping coefficient.
+
+Both gains are bounded:
 
 $$\alpha_\lambda \leq \frac{1}{L_\psi \cdot W}, \qquad \mu \leq \frac{\alpha_\lambda \cdot \Delta t}{2}$$
 

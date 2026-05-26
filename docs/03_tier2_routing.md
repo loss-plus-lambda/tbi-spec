@@ -226,7 +226,7 @@ A routing stack that grows too large defeats its own purpose. The gate's thermod
 
 $$C_g \leq \epsilon_f \cdot C_f, \qquad \epsilon_f \in [0.01,\; 0.05]$$
 
-$$C_g \leq \epsilon_n \cdot (1 - p^*)(C_s - C_f), \qquad \epsilon_n \leq 0.10$$
+$$C_g \leq \epsilon_n \cdot (1 - p^{\ast})(C_s - C_f), \qquad \epsilon_n \leq 0.10$$
 
 The first constraint limits the gate to at most 1–5% of the fast path's own FLOP and bandwidth budget, preventing it from materially degrading the fast path's energy advantage. The second ensures the gate consumes at most 10% of the routing savings margin, preserving a 10× efficiency buffer against measurement error and workload variation. Both constraints must hold at the observed $p^{\ast}$, not just at the median. $p^{\ast}$ is tracked as a rolling 7-day empirical percentile from production traffic logs, not a fixed design parameter. A gate that violates either constraint at the current $p^{\ast}$ — whether due to initial design or subsequent workload drift — must trigger a mandatory routing-policy review within 72 hours: either restructure the gate, or adjust escalation thresholds to restore compliance at the current $p^{\ast}$.
 

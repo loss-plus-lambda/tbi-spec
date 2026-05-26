@@ -24,9 +24,10 @@ The TBI proposal has two parts. The first is a **near-term software path** that 
 
 ## Table of Contents
 
-- [Thermodynamically Bounded Intelligence](#thermodynamically-bounded-intelligence)
+- [Thermodynamically Bounded Intelligence (TBI)](#thermodynamically-bounded-intelligence-tbi)
   - [Motivation](#motivation)
   - [Abstract](#abstract)
+  - [Table of Contents](#table-of-contents)
   - [1. Problem Statement](#1-problem-statement)
   - [2. Core Thesis](#2-core-thesis)
   - [3. Scope and Non-Goals](#3-scope-and-non-goals)
@@ -387,7 +388,11 @@ Retraining uses variance-normalized, importance-weighted empirical risk minimiza
 
 $$\min_\psi \sum_i w_i \left\|\mathbf{D}^{-1/2}\!\left(\hat{\mathbf{c}}_\psi(z_i) - c_i\right)\right\|_2^2 + \eta\|\psi\|_2^2, \qquad w_i = \mathrm{clip}\!\left(\frac{p_{\text{new}}(z_i)}{p_{\text{old}}(z_i)},\; \tfrac{1}{10},\; 10\right)$$
 
-where $\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$ is the empirical per-component variance matrix of the cost vector in the trace dataset. Variance normalization prevents the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) from dominating the regression objective. The weight clip at $[0.1, 10]$ bounds IS variance — unclipped density ratios from a neural discriminator can have unbounded variance when old and new routing distributions have near-disjoint support. The binary throttling indicator $\chi$ is trained with a separate cross-entropy head; the total surrogate loss sums the normalized-MSE regression heads $(J, L, M)$ and the cross-entropy head $(\chi)$.
+where
+
+$$\mathbf{D} = \mathrm{diag}(\hat{\sigma}_J^2, \hat{\sigma}_L^2, \hat{\sigma}_M^2, \hat{\sigma}_\chi^2)$$
+
+is the empirical per-component variance matrix of the cost vector in the trace dataset. Variance normalization prevents the cost component with the largest absolute scale (typically $M$, memory bandwidth in bytes, $\mathcal{O}(10^9)$, versus $J$ in millijoules, $\mathcal{O}(10^{-3})$) from dominating the regression objective. The weight clip at $[0.1, 10]$ bounds IS variance — unclipped density ratios from a neural discriminator can have unbounded variance when old and new routing distributions have near-disjoint support. The binary throttling indicator $\chi$ is trained with a separate cross-entropy head; the total surrogate loss sums the normalized-MSE regression heads $(J, L, M)$ and the cross-entropy head $(\chi)$.
 
 **Unit Normalization Convention.** All cost terms entering the Lagrangian are normalized: $J$ in millijoules-per-token, $L$ in milliseconds, $M$ in gigabytes-per-request. Lagrange multipliers $\lambda_k$ carry the reciprocal units, ensuring the step-size bound $\alpha_\lambda \leq 1/(L_\psi W)$ is evaluated in consistent dimensions across all constraint types.
 
